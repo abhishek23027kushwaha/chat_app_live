@@ -14,7 +14,7 @@ connectDB();
 const app = express();
 const _dirname = path.resolve();
 app.use(cors({
-  origin: "https://chat-app-live-1-0u5q.onrender.com",
+  origin: ["http://localhost:5173", "https://chat-app-live-1-0u5q.onrender.com"],
   credentials: true
 }));
 app.use(express.json());
