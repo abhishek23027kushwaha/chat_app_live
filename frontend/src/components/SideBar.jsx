@@ -22,6 +22,7 @@ function SideBar() {
     const fetchOtherUsers = async () => {
       try {
         const res = await axios.get(`${server_url}/api/user/others`, { withCredentials: true })
+        console.log("Other users fetched:", res.data);
         dispatch(setOtherUsers(res.data))
       } catch (error) {
         console.log(error)
@@ -55,10 +56,12 @@ function SideBar() {
     }
   }
 
-  const filteredUsers = otherUsers?.filter(user =>
-    user.name?.toLowerCase().includes(input.toLowerCase()) || 
-    user.userName?.toLowerCase().includes(input.toLowerCase())
-  )
+  const filteredUsers = otherUsers?.filter(user => {
+    const name = user.name?.toLowerCase() || "";
+    const userName = user.userName?.toLowerCase() || "";
+    const searchInput = input.toLowerCase();
+    return name.includes(searchInput) || userName.includes(searchInput);
+  });
 
   return (
     <div className={`lg:w-[30%] w-full h-full bg-slate-200 relative ${selectedUser ? "hidden" : "block"} lg:block`}>
@@ -120,28 +123,32 @@ function SideBar() {
 
       {/* Users List */}
       <div className='w-full h-[50%] overflow-auto flex flex-col gap-[15px] mt-[20px] items-center'>
-        {filteredUsers?.map(user => (
-          <div
-            key={user._id}
-            className={`w-[95%] h-[60px] bg-white shadow-lg rounded-full flex items-center gap-[20px] px-[20px] hover:bg-[#78cae5] cursor-pointer ${selectedUser?._id === user._id ? "bg-[#78cae5]" : ""}`}
-            onClick={() => dispatch(setSelectedUser(user))}
-          >
-            <div className='relative'>
-              <div className='w-[50px] h-[50px] rounded-full overflow-hidden'>
-                <img src={user.image || dp} alt="" className='h-full w-full object-cover'/>
+        {filteredUsers?.length > 0 ? (
+          filteredUsers.map(user => (
+            <div
+              key={user._id}
+              className={`w-[95%] h-[60px] min-h-[60px] bg-white shadow-lg rounded-full flex items-center gap-[20px] px-[20px] hover:bg-[#78cae5] cursor-pointer ${selectedUser?._id === user._id ? "bg-[#78cae5]" : ""}`}
+              onClick={() => dispatch(setSelectedUser(user))}
+            >
+              <div className='relative'>
+                <div className='w-[50px] h-[50px] rounded-full overflow-hidden'>
+                  <img src={user.image || dp} alt="" className='h-full w-full object-cover'/>
+                </div>
+
+                {/* Online status (logic placeholder) */}
+                {user.online && (
+                  <span className='w-[12px] h-[12px] bg-[#3aff20] rounded-full absolute bottom-[6px] right-0'></span>
+                )}
               </div>
 
-              {/* Online status (logic placeholder) */}
-              {user.online && (
-                <span className='w-[12px] h-[12px] bg-[#3aff20] rounded-full absolute bottom-[6px] right-0'></span>
-              )}
+              <h1 className='text-gray-800 font-semibold text-[18px]'>
+                {user.name || user.userName}
+              </h1>
             </div>
-
-            <h1 className='text-gray-800 font-semibold text-[18px]'>
-              {user.name || user.userName}
-            </h1>
-          </div>
-        ))}
+          ))
+        ) : (
+          <p className='text-gray-500 mt-10'>No users found</p>
+        )}
       </div>
 
     </div>
