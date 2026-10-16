@@ -72,6 +72,32 @@ io.on("connection", (socket) => {
     });
   });
 
+  // Group room events
+  socket.on("join_group", (groupId) => {
+    if (groupId) {
+      socket.join(String(groupId));
+    }
+  });
+
+  socket.on("leave_group", (groupId) => {
+    if (groupId) {
+      socket.leave(String(groupId));
+    }
+  });
+
+  // Group typing events
+  socket.on("group_typing", ({ groupId, userName }) => {
+    if (groupId) {
+      socket.to(String(groupId)).emit("group_typing", { groupId, userName, senderId: userId });
+    }
+  });
+
+  socket.on("group_stop_typing", ({ groupId }) => {
+    if (groupId) {
+      socket.to(String(groupId)).emit("group_stop_typing", { groupId, senderId: userId });
+    }
+  });
+
   // Handle user disconnect
   socket.on("disconnect", () => {
     if (userId && userSocketMap[userId]) {

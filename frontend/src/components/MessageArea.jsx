@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { IoIosArrowRoundBack } from "react-icons/io";
+import { IoInformationCircleOutline } from "react-icons/io5";
+import { MdGroups } from "react-icons/md";
 import dp from "../assets/dp.webp";
 import { RiEmojiStickerLine } from "react-icons/ri";
 import { FaImages } from "react-icons/fa6";
@@ -8,14 +10,15 @@ import EmojiPicker from "emoji-picker-react";
 import SenderMessage from "./SenderMessage";
 import ReceiverMessage from "./ReceiverMessage";
 import { useDispatch, useSelector } from "react-redux";
-import { setMessages, setSelectedUser } from "@/redux/userSlice";
+import { setMessages, setSelectedUser, setSelectedGroup } from "@/redux/userSlice";
 import axios from "axios";
 import { server_url } from "@/utils/constant";
 import { useSocketContext } from "@/context/SocketContext";
+import GroupInfoModal from "./GroupInfoModal";
 
 function MessageArea() {
   const dispatch = useDispatch();
-  const { selectedUser, messages, userData } = useSelector((store) => store.auth);
+  const { selectedUser, selectedGroup, messages, userData } = useSelector((store) => store.auth);
   const { socket, onlineUsers } = useSocketContext();
 
   const [showPicker, setShowPicker] = useState(false);
@@ -23,16 +26,21 @@ function MessageArea() {
   const [frontendImage, setFrontendImage] = useState(null);
   const [backendImage, setBackendImage] = useState(null);
   const [isTyping, setIsTyping] = useState(false);
+  const [groupTypingUser, setGroupTypingUser] = useState(null);
+  const [isGroupInfoOpen, setIsGroupInfoOpen] = useState(false);
 
   const imageRef = useRef();
   const scrollRef = useRef();
   const typingTimeoutRef = useRef(null);
 
+  const isGroupChat = Boolean(selectedGroup);
+  const activeChat = selectedUser || selectedGroup;
+
   const isOnline = Boolean(
     selectedUser?._id && onlineUsers?.some((id) => String(id) === String(selectedUser._id))
   );
 
-  // 🔹 Fetch messages
+  // 🔹 Fetch messages (Direct or Group)
   useEffect(() => {
     if (selectedUser) {
       const fetchMessages = async () => {
@@ -45,47 +53,92 @@ function MessageArea() {
       };
       fetchMessages();
       setIsTyping(false);
-    }
-  }, [selectedUser?._id, dispatch]);
+    } else if (selectedGroup) {
+      const fetchGroupMessages = async () => {
+        try {
+          const res = await axios.get(`${server_url}/api/group/messages/${selectedGroup._id}`, { withCredentials: true });
+          dispatch(setMessages(res.data));
+        } catch (error) {
+          console.log(error);
+        }
+      };
+      fetchGroupMessages();
+      setGroupTypingUser(null);
 
-  // 🔹 Real-time socket listeners (Typing indicator & New incoming messages)
+      // Join group room on socket
+      if (socket) {
+        socket.emit("join_group", selectedGroup._id);
+      }
+    }
+  }, [selectedUser?._id, selectedGroup?._id, dispatch, socket]);
+
+  // 🔹 Real-time socket listeners for Direct Chat & Group Chat
   useEffect(() => {
     if (!socket) return;
 
+    // 1-on-1 events
     const handleTyping = ({ senderId }) => {
-      if (selectedUser?._id === senderId) {
+      if (selectedUser?._id && String(selectedUser._id) === String(senderId)) {
         setIsTyping(true);
       }
     };
 
     const handleStopTyping = ({ senderId }) => {
-      if (selectedUser?._id === senderId) {
+      if (selectedUser?._id && String(selectedUser._id) === String(senderId)) {
         setIsTyping(false);
       }
     };
 
     const handleNewMessage = (newMessage) => {
-      if (selectedUser?._id === newMessage.sender) {
+      if (selectedUser?._id && String(selectedUser._id) === String(newMessage.sender)) {
         dispatch(setMessages([...messages, newMessage]));
         setIsTyping(false);
+      }
+    };
+
+    // Group events
+    const handleGroupTyping = ({ groupId, userName, senderId }) => {
+      if (selectedGroup?._id && String(selectedGroup._id) === String(groupId)) {
+        if (String(senderId) !== String(userData?._id)) {
+          setGroupTypingUser(userName);
+        }
+      }
+    };
+
+    const handleGroupStopTyping = ({ groupId }) => {
+      if (selectedGroup?._id && String(selectedGroup._id) === String(groupId)) {
+        setGroupTypingUser(null);
+      }
+    };
+
+    const handleNewGroupMessage = ({ groupId, message }) => {
+      if (selectedGroup?._id && String(selectedGroup._id) === String(groupId)) {
+        dispatch(setMessages([...messages, message]));
+        setGroupTypingUser(null);
       }
     };
 
     socket.on("typing", handleTyping);
     socket.on("stop_typing", handleStopTyping);
     socket.on("newMessage", handleNewMessage);
+    socket.on("group_typing", handleGroupTyping);
+    socket.on("group_stop_typing", handleGroupStopTyping);
+    socket.on("newGroupMessage", handleNewGroupMessage);
 
     return () => {
       socket.off("typing", handleTyping);
       socket.off("stop_typing", handleStopTyping);
       socket.off("newMessage", handleNewMessage);
+      socket.off("group_typing", handleGroupTyping);
+      socket.off("group_stop_typing", handleGroupStopTyping);
+      socket.off("newGroupMessage", handleNewGroupMessage);
     };
-  }, [socket, selectedUser?._id, messages, dispatch]);
+  }, [socket, selectedUser?._id, selectedGroup?._id, messages, userData?._id, dispatch]);
 
   // 🔹 Scroll to bottom
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isTyping]);
+  }, [messages, isTyping, groupTypingUser]);
 
   const handleImage = (e) => {
     const file = e.target.files[0];
@@ -100,22 +153,37 @@ function MessageArea() {
     const value = e.target.value;
     setInput(value);
 
-    if (!socket || !selectedUser?._id) return;
+    if (!socket) return;
 
-    if (value.trim().length > 0) {
-      socket.emit("typing", { receiverId: selectedUser._id });
+    if (isGroupChat) {
+      if (!selectedGroup?._id) return;
 
-      // Clear any existing stop_typing timer
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
+      if (value.trim().length > 0) {
+        socket.emit("group_typing", {
+          groupId: selectedGroup._id,
+          userName: userData?.name || userData?.userName,
+        });
+
+        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = setTimeout(() => {
+          socket.emit("group_stop_typing", { groupId: selectedGroup._id });
+        }, 1500);
+      } else {
+        socket.emit("group_stop_typing", { groupId: selectedGroup._id });
       }
-
-      // Stop typing after 1.5 seconds of inactivity
-      typingTimeoutRef.current = setTimeout(() => {
-        socket.emit("stop_typing", { receiverId: selectedUser._id });
-      }, 1500);
     } else {
-      socket.emit("stop_typing", { receiverId: selectedUser._id });
+      if (!selectedUser?._id) return;
+
+      if (value.trim().length > 0) {
+        socket.emit("typing", { receiverId: selectedUser._id });
+
+        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = setTimeout(() => {
+          socket.emit("stop_typing", { receiverId: selectedUser._id });
+        }, 1500);
+      } else {
+        socket.emit("stop_typing", { receiverId: selectedUser._id });
+      }
     }
   };
 
@@ -123,12 +191,14 @@ function MessageArea() {
     e.preventDefault();
     if (!input && !backendImage) return;
 
-    // Stop typing indicator immediately
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
-    if (socket && selectedUser?._id) {
-      socket.emit("stop_typing", { receiverId: selectedUser._id });
+    // Clear typing indicator
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    if (socket) {
+      if (isGroupChat) {
+        socket.emit("group_stop_typing", { groupId: selectedGroup._id });
+      } else if (selectedUser?._id) {
+        socket.emit("stop_typing", { receiverId: selectedUser._id });
+      }
     }
 
     try {
@@ -138,16 +208,32 @@ function MessageArea() {
         formData.append("image", backendImage);
       }
 
-      const res = await axios.post(
-        `${server_url}/api/message/send/${selectedUser._id}`,
-        formData,
-        {
-          withCredentials: true,
-          headers: { "Content-Type": "multipart/form-data" },
+      if (isGroupChat) {
+        const res = await axios.post(
+          `${server_url}/api/group/send/${selectedGroup._id}`,
+          formData,
+          {
+            withCredentials: true,
+            headers: { "Content-Type": "multipart/form-data" },
+          }
+        );
+        // Note: New group message is also broadcast via socket, but if socket loop is delayed, append locally:
+        const alreadyInList = messages.some((m) => String(m._id) === String(res.data._id));
+        if (!alreadyInList) {
+          dispatch(setMessages([...messages, res.data]));
         }
-      );
+      } else {
+        const res = await axios.post(
+          `${server_url}/api/message/send/${selectedUser._id}`,
+          formData,
+          {
+            withCredentials: true,
+            headers: { "Content-Type": "multipart/form-data" },
+          }
+        );
+        dispatch(setMessages([...messages, res.data]));
+      }
 
-      dispatch(setMessages([...messages, res.data]));
       setInput("");
       setFrontendImage(null);
       setBackendImage(null);
@@ -161,9 +247,14 @@ function MessageArea() {
     setShowPicker(false);
   };
 
+  const handleBack = () => {
+    if (selectedUser) dispatch(setSelectedUser(null));
+    if (selectedGroup) dispatch(setSelectedGroup(null));
+  };
+
   return (
-    <div className={`w-full lg:flex-1 h-full bg-slate-200 relative overflow-hidden ${selectedUser ? "flex flex-col" : "hidden lg:flex lg:flex-col"}`}>
-      {selectedUser ? (
+    <div className={`w-full lg:flex-1 h-full bg-slate-200 relative overflow-hidden ${activeChat ? "flex flex-col" : "hidden lg:flex lg:flex-col"}`}>
+      {activeChat ? (
         <div className="w-full h-full flex flex-col overflow-hidden">
           
           {/* Header */}
@@ -172,36 +263,71 @@ function MessageArea() {
               <button 
                 type="button"
                 className="w-10 h-10 rounded-full hover:bg-white/10 active:scale-95 flex items-center justify-center cursor-pointer text-white transition-all shrink-0"
-                onClick={() => dispatch(setSelectedUser(null))}
+                onClick={handleBack}
                 title="Back to chat list"
               >
                 <IoIosArrowRoundBack className="w-8 h-8 text-white" />
               </button>
 
+              {/* Chat Avatar */}
               <div className="relative shrink-0">
-                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full overflow-hidden bg-white shadow-sm border border-white/60">
-                  <img src={selectedUser.image || dp} alt="" className="h-full w-full object-cover" />
+                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full overflow-hidden bg-white shadow-sm border border-white/60 flex items-center justify-center">
+                  {isGroupChat ? (
+                    selectedGroup.profileImage ? (
+                      <img src={selectedGroup.profileImage} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <MdGroups className="w-7 h-7 text-[#1797c2]" />
+                    )
+                  ) : (
+                    <img src={selectedUser.image || dp} alt="" className="h-full w-full object-cover" />
+                  )}
                 </div>
-                {isOnline && (
+                {!isGroupChat && isOnline && (
                   <span className="w-3 h-3 bg-emerald-400 border-2 border-white rounded-full absolute bottom-0 right-0 shadow-sm"></span>
                 )}
               </div>
 
+              {/* Chat Title & Status */}
               <div className="flex flex-col min-w-0">
-                <h1 className="text-white font-semibold text-base sm:text-lg leading-tight truncate max-w-[170px] sm:max-w-[320px]">
-                  {selectedUser.name || selectedUser.userName}
+                <h1 className="text-white font-semibold text-base sm:text-lg leading-tight truncate max-w-[150px] sm:max-w-[280px]">
+                  {isGroupChat ? selectedGroup.name : (selectedUser.name || selectedUser.userName)}
                 </h1>
-                {isTyping ? (
-                  <span className="text-xs text-white/95 font-medium italic flex items-center gap-1 animate-pulse">
-                    typing...
-                  </span>
-                ) : isOnline ? (
-                  <span className="text-[11px] text-emerald-300 font-medium">Online</span>
+                
+                {isGroupChat ? (
+                  groupTypingUser ? (
+                    <span className="text-xs text-white/95 font-medium italic animate-pulse">
+                      {groupTypingUser} is typing...
+                    </span>
+                  ) : (
+                    <span className="text-[11px] text-white/80 truncate">
+                      {selectedGroup.members?.length || 0} members
+                    </span>
+                  )
                 ) : (
-                  <span className="text-[11px] text-white/70">Offline</span>
+                  isTyping ? (
+                    <span className="text-xs text-white/95 font-medium italic flex items-center gap-1 animate-pulse">
+                      typing...
+                    </span>
+                  ) : isOnline ? (
+                    <span className="text-[11px] text-emerald-300 font-medium">Online</span>
+                  ) : (
+                    <span className="text-[11px] text-white/70">Offline</span>
+                  )
                 )}
               </div>
             </div>
+
+            {/* Header Right Actions */}
+            {isGroupChat && (
+              <button
+                type="button"
+                onClick={() => setIsGroupInfoOpen(true)}
+                className="w-10 h-10 rounded-full hover:bg-white/20 active:scale-95 flex items-center justify-center cursor-pointer text-white transition-all shrink-0"
+                title="View Group Info"
+              >
+                <IoInformationCircleOutline className="w-6 h-6 text-white" />
+              </button>
+            )}
           </div>
 
           {/* Messages Feed */}
@@ -216,27 +342,37 @@ function MessageArea() {
               </div>
             )}
 
-            {messages?.map((mess, index) => (
-              <div key={index} ref={index === messages.length - 1 ? scrollRef : null}>
-                {mess.sender === userData?._id ? (
-                  <SenderMessage
-                    image={mess.image}
-                    message={mess.message}
-                  />
-                ) : (
-                  <ReceiverMessage
-                    image={mess.image}
-                    message={mess.message}
-                  />
-                )}
-              </div>
-            ))}
+            {messages?.map((mess, index) => {
+              const senderId = mess.sender?._id || mess.sender;
+              const isMine = String(senderId) === String(userData?._id);
+
+              return (
+                <div key={mess._id || index} ref={index === messages.length - 1 ? scrollRef : null}>
+                  {isMine ? (
+                    <SenderMessage
+                      image={mess.image}
+                      message={mess.message}
+                      userImage={userData?.image}
+                    />
+                  ) : (
+                    <ReceiverMessage
+                      image={mess.image}
+                      message={mess.message}
+                      userImage={isGroupChat ? (mess.sender?.image || dp) : (selectedUser?.image || dp)}
+                      senderName={isGroupChat ? (mess.sender?.name || mess.sender?.userName) : null}
+                    />
+                  )}
+                </div>
+              );
+            })}
 
             {/* Floating Typing Indicator in chat */}
-            {isTyping && (
+            {(isTyping || groupTypingUser) && (
               <div className="flex items-center gap-2 px-3.5 py-1.5 bg-white/90 backdrop-blur-sm rounded-2xl w-fit shadow-sm text-gray-600 text-xs self-start my-1 animate-fadeIn border border-gray-100">
                 <span className="font-semibold text-[#1797c2]">
-                  {selectedUser.name || selectedUser.userName} is typing
+                  {isGroupChat
+                    ? `${groupTypingUser} is typing`
+                    : `${selectedUser.name || selectedUser.userName} is typing`}
                 </span>
                 <span className="flex gap-1 items-center ml-1">
                   <span className="w-1.5 h-1.5 bg-[#1797c2] rounded-full animate-bounce [animation-delay:-0.3s]"></span>
@@ -292,7 +428,7 @@ function MessageArea() {
 
               <input
                 type="text"
-                placeholder="Type a message..."
+                placeholder={isGroupChat ? `Message #${selectedGroup.name}...` : "Type a message..."}
                 value={input}
                 onChange={handleInputChange}
                 className="w-full bg-transparent outline-none text-gray-800 placeholder-gray-400 text-sm sm:text-base px-1"
@@ -327,13 +463,21 @@ function MessageArea() {
             Welcome to Chatly
           </h1>
           <p className="text-gray-500 text-sm mt-1 max-w-sm">
-            Select a user from the list to start a conversation!
+            Select a direct chat or group from the sidebar to start messaging!
           </p>
         </div>
+      )}
+
+      {/* Group Info Modal */}
+      {selectedGroup && (
+        <GroupInfoModal
+          isOpen={isGroupInfoOpen}
+          onClose={() => setIsGroupInfoOpen(false)}
+          group={selectedGroup}
+        />
       )}
     </div>
   );
 }
 
 export default MessageArea;
-

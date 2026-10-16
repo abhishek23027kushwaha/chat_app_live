@@ -6,6 +6,7 @@ import connectDB from "./config/db.js";
 import authRouter from "./routes/auth.route.js";
 import userRouter from "./routes/user.route.js";
 import messageRouter from "./routes/message.route.js";
+import groupRouter from "./routes/group.route.js";
 import path from "path";
 import fs from "fs";
 import { app, server } from "./socket/socket.js";
@@ -45,6 +46,7 @@ app.get("/", (req, res) => {
 app.use("/api/auth", authRouter);
 app.use("/api/user", userRouter);
 app.use("/api/message", messageRouter);
+app.use("/api/group", groupRouter);
 
 // Serve frontend dist if available
 const frontendDistPath = path.resolve(_dirname, "frontend", "dist");
