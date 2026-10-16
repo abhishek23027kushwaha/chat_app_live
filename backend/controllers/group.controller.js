@@ -319,7 +319,7 @@ export const leaveGroup = async (req, res) => {
 export const sendGroupMessage = async (req, res) => {
   try {
     const { groupId } = req.params;
-    const { message } = req.body;
+    const { message, audioDuration } = req.body;
     const senderId = req.userId;
 
     const group = await Group.findById(groupId);
@@ -333,8 +333,22 @@ export const sendGroupMessage = async (req, res) => {
     }
 
     let image = "";
-    if (req.file) {
-      image = await uploadOnCloudinary(req.file.path);
+    let audio = "";
+
+    if (req.files && req.files.length > 0) {
+      for (const file of req.files) {
+        if (file.fieldname === "image" || file.mimetype?.startsWith("image/")) {
+          image = await uploadOnCloudinary(file.path);
+        } else if (file.fieldname === "audio" || file.mimetype?.startsWith("audio/")) {
+          audio = await uploadOnCloudinary(file.path);
+        }
+      }
+    } else if (req.file) {
+      if (req.file.fieldname === "audio" || req.file.mimetype?.startsWith("audio/")) {
+        audio = await uploadOnCloudinary(req.file.path);
+      } else {
+        image = await uploadOnCloudinary(req.file.path);
+      }
     }
 
     const newMessage = await Message.create({
@@ -342,6 +356,8 @@ export const sendGroupMessage = async (req, res) => {
       groupId: groupId,
       message: message || "",
       image: image || "",
+      audio: audio || "",
+      audioDuration: Number(audioDuration) || 0,
     });
 
     group.messages.push(newMessage._id);

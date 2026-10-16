@@ -6,6 +6,6 @@ import { upload } from "../middlewares/multer.js";
 const messageRouter = express.Router();
 
 messageRouter.get("/:id", isAuth, getMessages);
-messageRouter.post("/send/:id", isAuth, upload.single("image"), sendMessage);
+messageRouter.post("/send/:id", isAuth, upload.any(), sendMessage);
 
 export default messageRouter;

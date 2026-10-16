@@ -23,7 +23,7 @@ groupRouter.put("/remove-member/:groupId", isAuth, removeMember);
 groupRouter.put("/leave/:groupId", isAuth, leaveGroup);
 
 // Group messaging routes
-groupRouter.post("/send/:groupId", isAuth, upload.single("image"), sendGroupMessage);
+groupRouter.post("/send/:groupId", isAuth, upload.any(), sendGroupMessage);
 groupRouter.get("/messages/:groupId", isAuth, getGroupMessages);
 
 export default groupRouter;

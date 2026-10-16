@@ -5,13 +5,27 @@ import { getReceiverSocketId, io } from "../socket/socket.js";
 
 export const sendMessage = async (req, res) => {
     try {
-        const { message } = req.body;
+        const { message, audioDuration } = req.body;
         const receiverId = req.params.id;
         const senderId = req.userId;
 
         let image = "";
-        if (req.file) {
-            image = await uploadOnCloudinary(req.file.path);
+        let audio = "";
+
+        if (req.files && req.files.length > 0) {
+            for (const file of req.files) {
+                if (file.fieldname === "image" || file.mimetype?.startsWith("image/")) {
+                    image = await uploadOnCloudinary(file.path);
+                } else if (file.fieldname === "audio" || file.mimetype?.startsWith("audio/")) {
+                    audio = await uploadOnCloudinary(file.path);
+                }
+            }
+        } else if (req.file) {
+            if (req.file.fieldname === "audio" || req.file.mimetype?.startsWith("audio/")) {
+                audio = await uploadOnCloudinary(req.file.path);
+            } else {
+                image = await uploadOnCloudinary(req.file.path);
+            }
         }
 
         let conversation = await Conversation.findOne({
@@ -27,8 +41,10 @@ export const sendMessage = async (req, res) => {
         const newMessage = new Message({
             sender: senderId,
             receiver: receiverId,
-            message,
-            image
+            message: message || "",
+            image: image || "",
+            audio: audio || "",
+            audioDuration: Number(audioDuration) || 0,
         });
 
         if (newMessage) {
