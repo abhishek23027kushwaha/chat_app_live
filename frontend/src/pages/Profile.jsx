@@ -26,26 +26,28 @@ function Profile() {
     }
   };
 
-  const handleProfile = async(e) => {
+  const handleProfile = async (e) => {
     e.preventDefault();
     let formData = new FormData();
-    formData.append("name",name);
-    FormData.append("image",backendImage);
+    formData.append("name", name);
+    if (backendImage) {
+      formData.append("image", backendImage);
+    }
     setSaving(true);
     try {
-      const res= await axios.post(`${server_url}/api/user/profile`,formData,{headers:"multiform/parts",
-        withCredentials:true})
-        if(res.data.success){
-          dispatch(res.data.user);
-          navigate("/");
-        }
-      
-      
+      const res = await axios.put(`${server_url}/api/user/profile`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+        withCredentials: true,
+      });
+      if (res.data.success) {
+        dispatch(setUserData(res.data.user));
+        navigate("/");
+      }
     } catch (error) {
       console.log(error);
-      
+    } finally {
+      setSaving(false);
     }
-
   };
 
   return (
@@ -65,7 +67,7 @@ function Profile() {
         onClick={() => imageRef.current.click()}
       >
         <div className="w-[200px] h-[200px] rounded-full overflow-hidden flex justify-center items-center">
-          <img src={frontendImage} alt="profile" className="h-full" />
+          <img src={frontendImage} alt="profile" className="h-full w-full object-cover" />
         </div>
 
         <div className="absolute bottom-4 right-4 w-[35px] h-[35px] rounded-full bg-[#20c7ff] flex justify-center items-center shadow-lg">
@@ -97,20 +99,20 @@ function Profile() {
         <input
           type="text"
           readOnly
-          value="abhishek_01"
-          className="w-[90%] h-[50px] border-2 border-[#20c7ff] px-[20px] rounded-lg shadow-lg text-gray-400 text-[19px]"
+          value={userData?.userName || ""}
+          className="w-[90%] h-[50px] border-2 border-[#20c7ff] px-[20px] rounded-lg shadow-lg text-gray-500 text-[19px] bg-gray-50 cursor-not-allowed"
         />
 
         <input
           type="email"
           readOnly
-          value="abhishek@gmail.com"
-          className="w-[90%] h-[50px] border-2 border-[#20c7ff] px-[20px] rounded-lg shadow-lg text-gray-400 text-[19px]"
+          value={userData?.email || ""}
+          className="w-[90%] h-[50px] border-2 border-[#20c7ff] px-[20px] rounded-lg shadow-lg text-gray-500 text-[19px] bg-gray-50 cursor-not-allowed"
         />
 
         <button
           disabled={saving}
-          className="px-[20px] py-[10px] bg-[#20c7ff] rounded-2xl shadow-lg text-[20px] w-[200px] mt-[20px] font-semibold"
+          className="px-[20px] py-[10px] bg-[#20c7ff] hover:bg-[#12bbf2] text-white rounded-2xl shadow-lg text-[20px] w-[200px] mt-[20px] font-semibold cursor-pointer transition-all disabled:opacity-60"
         >
           {saving ? "Saving..." : "Save Profile"}
         </button>

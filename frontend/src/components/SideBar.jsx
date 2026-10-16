@@ -8,11 +8,13 @@ import axios from 'axios';
 import { server_url } from '@/utils/constant';
 import { setOtherUsers, setSelectedUser, setUserData } from '@/redux/userSlice';
 import { useNavigate } from 'react-router-dom';
+import { useSocketContext } from '@/context/SocketContext';
 
 function SideBar() {
   const dispatch = useDispatch()
   const navigate = useNavigate()
   const { userData, otherUsers, selectedUser } = useSelector(store => store.auth)
+  const { onlineUsers } = useSocketContext()
 
   const [search, setSearch] = useState(false)
   const [input, setInput] = useState("")
@@ -21,40 +23,51 @@ function SideBar() {
   useEffect(() => {
     const fetchOtherUsers = async () => {
       try {
-        const res = await axios.get(`${server_url}/api/user/others`, { withCredentials: true })
+        const res = await axios.get(`${server_url}/api/user/others`, { withCredentials: true });
         console.log("Other users fetched:", res.data);
-        dispatch(setOtherUsers(res.data))
+        dispatch(setOtherUsers(res.data));
       } catch (error) {
-        console.log(error)
+        console.log(error);
+        if (error.response?.status === 401) {
+          dispatch(setUserData(null));
+          navigate("/login");
+        }
       }
+    };
+    if (userData) {
+      fetchOtherUsers();
     }
-    fetchOtherUsers()
-  }, [dispatch])
+  }, [dispatch, userData, navigate]);
 
-  // 🔹 Fetch current user if not present (optional, usually set on login)
+  // 🔹 Fetch current user if not present
   useEffect(() => {
     if (!userData) {
       const fetchCurrentUser = async () => {
         try {
-          const res = await axios.get(`${server_url}/api/user/current`, { withCredentials: true })
-          dispatch(setUserData(res.data))
+          const res = await axios.get(`${server_url}/api/user/current`, { withCredentials: true });
+          dispatch(setUserData(res.data));
         } catch (error) {
-          console.log(error)
+          console.log(error);
+          dispatch(setUserData(null));
+          navigate("/login");
         }
-      }
-      fetchCurrentUser()
+      };
+      fetchCurrentUser();
     }
-  }, [userData, dispatch])
+  }, [userData, dispatch, navigate]);
 
   const handleLogout = async () => {
     try {
-      await axios.get(`${server_url}/api/auth/logout`, { withCredentials: true })
-      dispatch(setUserData(null))
-      navigate("/login")
+      await axios.get(`${server_url}/api/auth/logout`, { withCredentials: true });
     } catch (error) {
-      console.log(error)
+      console.log(error);
+    } finally {
+      dispatch(setUserData(null));
+      dispatch(setSelectedUser(null));
+      dispatch(setOtherUsers([]));
+      navigate("/login");
     }
-  }
+  };
 
   const filteredUsers = otherUsers?.filter(user => {
     const name = user.name?.toLowerCase() || "";
@@ -135,9 +148,9 @@ function SideBar() {
                   <img src={user.image || dp} alt="" className='h-full w-full object-cover'/>
                 </div>
 
-                {/* Online status (logic placeholder) */}
-                {user.online && (
-                  <span className='w-[12px] h-[12px] bg-[#3aff20] rounded-full absolute bottom-[6px] right-0'></span>
+                {/* Real-time online status */}
+                {onlineUsers?.includes(user._id) && (
+                  <span className='w-[14px] h-[14px] bg-[#3aff20] border-2 border-white rounded-full absolute bottom-[2px] right-0 shadow-sm'></span>
                 )}
               </div>
 
