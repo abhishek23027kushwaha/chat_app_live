@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { IoIosArrowRoundBack } from "react-icons/io";
-import { IoInformationCircleOutline } from "react-icons/io5";
+import { IoInformationCircleOutline, IoVideocam } from "react-icons/io5";
 import { MdGroups } from "react-icons/md";
 import dp from "../assets/dp.webp";
 import { RiEmojiStickerLine } from "react-icons/ri";
@@ -14,12 +14,14 @@ import { setMessages, setSelectedUser, setSelectedGroup } from "@/redux/userSlic
 import axios from "axios";
 import { server_url } from "@/utils/constant";
 import { useSocketContext } from "@/context/SocketContext";
+import { useCallContext } from "@/context/CallContext";
 import GroupInfoModal from "./GroupInfoModal";
 
 function MessageArea() {
   const dispatch = useDispatch();
   const { selectedUser, selectedGroup, messages, userData } = useSelector((store) => store.auth);
   const { socket, onlineUsers } = useSocketContext();
+  const { startCall } = useCallContext();
 
   const [showPicker, setShowPicker] = useState(false);
   const [input, setInput] = useState("");
@@ -318,7 +320,7 @@ function MessageArea() {
             </div>
 
             {/* Header Right Actions */}
-            {isGroupChat && (
+            {isGroupChat ? (
               <button
                 type="button"
                 onClick={() => setIsGroupInfoOpen(true)}
@@ -327,6 +329,17 @@ function MessageArea() {
               >
                 <IoInformationCircleOutline className="w-6 h-6 text-white" />
               </button>
+            ) : (
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => startCall(selectedUser, "video")}
+                  className="w-10 h-10 rounded-full hover:bg-white/20 active:scale-95 flex items-center justify-center cursor-pointer text-white transition-all shrink-0"
+                  title="Start Video Call"
+                >
+                  <IoVideocam className="w-5 h-5 text-white" />
+                </button>
+              </div>
             )}
           </div>
 
