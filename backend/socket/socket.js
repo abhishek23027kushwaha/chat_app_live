@@ -27,18 +27,30 @@ const io = new Server(server, {
   },
 });
 
-// Map of userId to socketId
-const userSocketMap = {}; // { userId: socketId }
+// Map of userId to Set of socketIds (supports reconnects, multiple tabs, and transport upgrades)
+const userSocketMap = {}; // { userId: Set<socketId> }
 
 export const getReceiverSocketId = (receiverId) => {
-  return userSocketMap[receiverId];
+  if (!receiverId) return [];
+  const idStr = String(receiverId).trim();
+  if (userSocketMap[idStr] && userSocketMap[idStr].size > 0) {
+    return Array.from(userSocketMap[idStr]);
+  }
+  return [];
 };
 
 io.on("connection", (socket) => {
-  const userId = socket.handshake.query.userId;
-  if (userId && userId !== "undefined") {
-    userSocketMap[userId] = socket.id;
-    console.log(`User connected: ${userId} with socket ID: ${socket.id}`);
+  const rawUserId = socket.handshake.query.userId;
+  const userId = rawUserId && rawUserId !== "undefined" && rawUserId !== "null" 
+    ? String(rawUserId).trim() 
+    : null;
+
+  if (userId) {
+    if (!userSocketMap[userId]) {
+      userSocketMap[userId] = new Set();
+    }
+    userSocketMap[userId].add(socket.id);
+    console.log(`User connected: ${userId} (active sockets: ${userSocketMap[userId].size})`);
   }
 
   // Broadcast all currently online users
@@ -46,25 +58,30 @@ io.on("connection", (socket) => {
 
   // Typing event
   socket.on("typing", ({ receiverId }) => {
-    const receiverSocketId = getReceiverSocketId(receiverId);
-    if (receiverSocketId) {
-      io.to(receiverSocketId).emit("typing", { senderId: userId });
-    }
+    const receiverSocketIds = getReceiverSocketId(receiverId);
+    receiverSocketIds.forEach((sId) => {
+      io.to(sId).emit("typing", { senderId: userId });
+    });
   });
 
   // Stop typing event
   socket.on("stop_typing", ({ receiverId }) => {
-    const receiverSocketId = getReceiverSocketId(receiverId);
-    if (receiverSocketId) {
-      io.to(receiverSocketId).emit("stop_typing", { senderId: userId });
-    }
+    const receiverSocketIds = getReceiverSocketId(receiverId);
+    receiverSocketIds.forEach((sId) => {
+      io.to(sId).emit("stop_typing", { senderId: userId });
+    });
   });
 
   // Handle user disconnect
   socket.on("disconnect", () => {
-    if (userId) {
-      console.log(`User disconnected: ${userId}`);
-      delete userSocketMap[userId];
+    if (userId && userSocketMap[userId]) {
+      userSocketMap[userId].delete(socket.id);
+      if (userSocketMap[userId].size === 0) {
+        delete userSocketMap[userId];
+        console.log(`User completely offline: ${userId}`);
+      } else {
+        console.log(`User ${userId} closed a socket, still has ${userSocketMap[userId].size} active`);
+      }
     }
     io.emit("getOnlineUsers", Object.keys(userSocketMap));
   });

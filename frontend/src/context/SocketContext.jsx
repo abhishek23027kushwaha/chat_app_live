@@ -16,17 +16,34 @@ export const SocketContextProvider = ({ children }) => {
 
   useEffect(() => {
     if (userData?._id) {
+      const userIdStr = String(userData._id).trim();
+
       const newSocket = io(server_url, {
         query: {
-          userId: userData._id,
+          userId: userIdStr,
         },
         withCredentials: true,
+        reconnection: true,
+        reconnectionAttempts: 20,
+        reconnectionDelay: 1000,
+        transports: ["websocket", "polling"],
       });
 
       setSocket(newSocket);
 
+      newSocket.on("connect", () => {
+        console.log("Socket connected with ID:", newSocket.id);
+      });
+
       newSocket.on("getOnlineUsers", (users) => {
-        setOnlineUsers(users);
+        const stringifiedUsers = Array.isArray(users) 
+          ? users.map((u) => String(u).trim()) 
+          : [];
+        setOnlineUsers(stringifiedUsers);
+      });
+
+      newSocket.on("connect_error", (err) => {
+        console.warn("Socket connect error:", err.message);
       });
 
       return () => {
@@ -37,8 +54,9 @@ export const SocketContextProvider = ({ children }) => {
         socket.close();
         setSocket(null);
       }
+      setOnlineUsers([]);
     }
-  }, [userData?._id]);
+  }, [userData?._id ? String(userData._id) : null]);
 
   return (
     <SocketContext.Provider value={{ socket, onlineUsers }}>

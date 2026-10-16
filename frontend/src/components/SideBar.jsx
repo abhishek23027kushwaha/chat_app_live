@@ -154,8 +154,8 @@ function SideBar() {
       <div className="w-full flex-1 overflow-y-auto px-3 py-2 space-y-2">
         {filteredUsers?.length > 0 ? (
           filteredUsers.map((user) => {
-            const isUserOnline = onlineUsers?.includes(user._id);
-            const isSelected = selectedUser?._id === user._id;
+            const isUserOnline = Boolean(user?._id && onlineUsers?.some(id => String(id) === String(user._id)));
+            const isSelected = Boolean(selectedUser?._id && String(selectedUser._id) === String(user._id));
 
             return (
               <div

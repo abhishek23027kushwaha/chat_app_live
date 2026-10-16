@@ -28,7 +28,9 @@ function MessageArea() {
   const scrollRef = useRef();
   const typingTimeoutRef = useRef(null);
 
-  const isOnline = onlineUsers?.includes(selectedUser?._id);
+  const isOnline = Boolean(
+    selectedUser?._id && onlineUsers?.some((id) => String(id) === String(selectedUser._id))
+  );
 
   // 🔹 Fetch messages
   useEffect(() => {

@@ -38,9 +38,11 @@ export const sendMessage = async (req, res) => {
         await Promise.all([conversation.save(), newMessage.save()]);
 
         // Real-time message delivery via Socket.IO
-        const receiverSocketId = getReceiverSocketId(receiverId);
-        if (receiverSocketId) {
-            io.to(receiverSocketId).emit("newMessage", newMessage);
+        const receiverSocketIds = getReceiverSocketId(receiverId);
+        if (receiverSocketIds && receiverSocketIds.length > 0) {
+            receiverSocketIds.forEach((sId) => {
+                io.to(sId).emit("newMessage", newMessage);
+            });
         }
 
         return res.status(201).json(newMessage);
