@@ -160,28 +160,33 @@ function MessageArea() {
   };
 
   return (
-    <div className="lg:w-[70%] w-full h-full bg-slate-200 border-l-2 border-gray-300 relative overflow-hidden">
+    <div className={`w-full lg:flex-1 h-full bg-slate-200 relative overflow-hidden ${selectedUser ? "flex flex-col" : "hidden lg:flex lg:flex-col"}`}>
       {selectedUser ? (
-        <div className="w-full h-[100vh] flex flex-col overflow-hidden">
+        <div className="w-full h-full flex flex-col overflow-hidden">
           
           {/* Header */}
-          <div className="w-full h-[100px] bg-[#1797c2] rounded-b-[30px] shadow-lg flex items-center justify-between px-[20px]">
-            <div className="flex items-center gap-[15px]">
-              <div className="cursor-pointer" onClick={() => dispatch(setSelectedUser(null))}>
-                <IoIosArrowRoundBack className="w-[40px] h-[40px] text-white" />
-              </div>
+          <div className="w-full h-[65px] sm:h-[75px] bg-[#1797c2] shadow-md flex items-center justify-between px-3 sm:px-5 shrink-0 z-10">
+            <div className="flex items-center gap-3 min-w-0">
+              <button 
+                type="button"
+                className="w-10 h-10 rounded-full hover:bg-white/10 active:scale-95 flex items-center justify-center cursor-pointer text-white transition-all shrink-0"
+                onClick={() => dispatch(setSelectedUser(null))}
+                title="Back to chat list"
+              >
+                <IoIosArrowRoundBack className="w-8 h-8 text-white" />
+              </button>
 
-              <div className="relative">
-                <div className="w-[50px] h-[50px] rounded-full overflow-hidden bg-white shadow-lg">
+              <div className="relative shrink-0">
+                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full overflow-hidden bg-white shadow-sm border border-white/60">
                   <img src={selectedUser.image || dp} alt="" className="h-full w-full object-cover" />
                 </div>
                 {isOnline && (
-                  <span className="w-3.5 h-3.5 bg-emerald-400 border-2 border-white rounded-full absolute bottom-0 right-0"></span>
+                  <span className="w-3 h-3 bg-emerald-400 border-2 border-white rounded-full absolute bottom-0 right-0 shadow-sm"></span>
                 )}
               </div>
 
-              <div className="flex flex-col">
-                <h1 className="text-white font-semibold text-[20px] leading-tight">
+              <div className="flex flex-col min-w-0">
+                <h1 className="text-white font-semibold text-base sm:text-lg leading-tight truncate max-w-[170px] sm:max-w-[320px]">
                   {selectedUser.name || selectedUser.userName}
                 </h1>
                 {isTyping ? (
@@ -189,21 +194,21 @@ function MessageArea() {
                     typing...
                   </span>
                 ) : isOnline ? (
-                  <span className="text-xs text-emerald-300 font-medium">Online</span>
+                  <span className="text-[11px] text-emerald-300 font-medium">Online</span>
                 ) : (
-                  <span className="text-xs text-white/70">Offline</span>
+                  <span className="text-[11px] text-white/70">Offline</span>
                 )}
               </div>
             </div>
           </div>
 
           {/* Messages Feed */}
-          <div className="w-full flex-1 py-[20px] px-[20px] overflow-auto gap-[15px] flex flex-col">
+          <div className="w-full flex-1 py-3 px-3 sm:px-6 overflow-y-auto flex flex-col gap-3">
             {showPicker && (
-              <div className="absolute bottom-[120px] left-[20px] z-50">
+              <div className="absolute bottom-[80px] left-4 z-50 shadow-2xl rounded-2xl overflow-hidden animate-fadeIn">
                 <EmojiPicker
-                  width={250}
-                  height={350}
+                  width={300}
+                  height={380}
                   onEmojiClick={onEmojiClick}
                 />
               </div>
@@ -227,7 +232,7 @@ function MessageArea() {
 
             {/* Floating Typing Indicator in chat */}
             {isTyping && (
-              <div className="flex items-center gap-2 px-4 py-2 bg-white/90 backdrop-blur-sm rounded-2xl w-fit shadow-md text-gray-600 text-xs self-start my-1 animate-fadeIn">
+              <div className="flex items-center gap-2 px-3.5 py-1.5 bg-white/90 backdrop-blur-sm rounded-2xl w-fit shadow-sm text-gray-600 text-xs self-start my-1 animate-fadeIn border border-gray-100">
                 <span className="font-semibold text-[#1797c2]">
                   {selectedUser.name || selectedUser.userName} is typing
                 </span>
@@ -241,23 +246,39 @@ function MessageArea() {
           </div>
 
           {/* Input Area */}
-          <div className="w-full h-[100px] flex items-center justify-center">
+          <div className="w-full p-2.5 sm:p-4 bg-white/95 backdrop-blur-md border-t border-gray-300 shrink-0 flex items-center justify-center relative">
             {frontendImage && (
-              <img
-                src={frontendImage}
-                alt=""
-                className="w-[80px] absolute bottom-[110px] right-[20%] rounded-lg shadow-lg"
-              />
+              <div className="absolute bottom-[75px] left-4 bg-white p-1 rounded-xl shadow-xl border border-gray-200 animate-fadeIn z-20">
+                <img
+                  src={frontendImage}
+                  alt="preview"
+                  className="w-20 h-20 object-cover rounded-lg"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFrontendImage(null);
+                    setBackendImage(null);
+                  }}
+                  className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center shadow cursor-pointer font-bold"
+                >
+                  ✕
+                </button>
+              </div>
             )}
 
             <form
               onSubmit={handleSendMessage}
-              className="w-[95%] lg:w-[70%] h-[60px] bg-[#1797c2] rounded-full shadow-lg flex items-center gap-[20px] px-[20px]"
+              className="w-full max-w-4xl h-[50px] sm:h-[55px] bg-slate-100 border border-gray-300 rounded-full shadow-inner flex items-center gap-2 px-3 sm:px-4"
             >
-              <RiEmojiStickerLine
-                className="w-[25px] h-[25px] text-white cursor-pointer"
+              <button
+                type="button"
+                className="text-gray-500 hover:text-[#1797c2] cursor-pointer shrink-0 p-1"
                 onClick={() => setShowPicker((prev) => !prev)}
-              />
+                title="Emoji"
+              >
+                <RiEmojiStickerLine className="w-6 h-6" />
+              </button>
 
               <input
                 type="file"
@@ -269,33 +290,43 @@ function MessageArea() {
 
               <input
                 type="text"
-                placeholder="Message"
+                placeholder="Type a message..."
                 value={input}
                 onChange={handleInputChange}
-                className="w-full bg-transparent outline-none text-white placeholder-white text-[18px]"
+                className="w-full bg-transparent outline-none text-gray-800 placeholder-gray-400 text-sm sm:text-base px-1"
               />
 
-              <FaImages
-                className="w-[25px] h-[25px] text-white cursor-pointer"
+              <button
+                type="button"
+                className="text-gray-500 hover:text-[#1797c2] cursor-pointer shrink-0 p-1"
                 onClick={() => imageRef.current.click()}
-              />
+                title="Send Image"
+              >
+                <FaImages className="w-5 h-5" />
+              </button>
 
-              {(input || frontendImage) && (
-                <button type="submit" className="cursor-pointer">
-                  <RiSendPlane2Fill className="w-[25px] h-[25px] text-white" />
+              {(input.trim() || frontendImage) && (
+                <button 
+                  type="submit" 
+                  className="w-9 h-9 rounded-full bg-[#1797c2] hover:bg-[#1280a5] text-white flex items-center justify-center shrink-0 shadow cursor-pointer transition-all active:scale-95"
+                >
+                  <RiSendPlane2Fill className="w-4 h-4 ml-0.5" />
                 </button>
               )}
             </form>
           </div>
         </div>
       ) : (
-        <div className="w-full h-full flex flex-col justify-center items-center">
-          <h1 className="text-gray-700 font-bold text-[50px]">
+        <div className="w-full h-full flex flex-col justify-center items-center text-center p-6 bg-slate-50">
+          <div className="w-20 h-20 rounded-full bg-cyan-100 flex items-center justify-center text-[#1797c2] text-4xl mb-4 shadow-sm">
+            💬
+          </div>
+          <h1 className="text-gray-700 font-extrabold text-2xl sm:text-3xl">
             Welcome to Chatly
           </h1>
-          <span className="text-gray-700 font-semibold text-[30px]">
-            Chat Friendly !
-          </span>
+          <p className="text-gray-500 text-sm mt-1 max-w-sm">
+            Select a user from the list to start a conversation!
+          </p>
         </div>
       )}
     </div>

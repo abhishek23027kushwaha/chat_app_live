@@ -17,7 +17,7 @@ function Home() {
   if (!userData) return null;
 
   return (
-    <div className="w-full h-screen flex">
+    <div className="w-full h-[100dvh] h-screen flex overflow-hidden bg-slate-100">
       <SideBar />
       <MessageArea />
     </div>

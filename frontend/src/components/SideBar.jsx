@@ -77,95 +77,138 @@ function SideBar() {
   });
 
   return (
-    <div className={`lg:w-[30%] w-full h-full bg-slate-200 relative ${selectedUser ? "hidden" : "block"} lg:block`}>
+    <div className={`w-full lg:w-[350px] xl:w-[400px] h-full bg-slate-100 flex flex-col border-r border-gray-300 shrink-0 ${selectedUser ? "hidden" : "flex"} lg:flex`}>
 
-      {/* Logout button */}
-      <div 
-        className='w-[60px] h-[60px] rounded-full bg-[#20c7ff] shadow-lg fixed bottom-[20px] left-[10px] flex justify-center items-center cursor-pointer z-50'
-        onClick={handleLogout}
-      >
-        <BiLogOutCircle className='w-[25px] h-[25px]' />
-      </div>
+      {/* Modern Top Header */}
+      <div className="w-full bg-gradient-to-r from-[#1797c2] to-[#20c7ff] text-white p-4 shadow-md shrink-0">
+        <div className="flex items-center justify-between">
+          
+          {/* User profile & Greeting */}
+          <div className="flex items-center gap-3">
+            <div 
+              className="w-12 h-12 rounded-full overflow-hidden border-2 border-white shadow-md cursor-pointer hover:opacity-90 transition-all shrink-0"
+              onClick={() => navigate("/profile")}
+              title="Click to edit profile"
+            >
+              <img src={userData?.image || dp} alt="profile" className="w-full h-full object-cover" />
+            </div>
+            
+            <div className="flex flex-col">
+              <h1 className="font-extrabold text-xl leading-tight tracking-wide">chatly</h1>
+              <p className="text-xs text-white/95 font-medium truncate max-w-[160px] sm:max-w-[200px]">
+                Hii, {userData?.name || userData?.userName}
+              </p>
+            </div>
+          </div>
 
-      {/* Header */}
-      <div className='w-full h-[300px] bg-[#20c7ff] rounded-b-[30%] shadow-lg px-[20px] flex flex-col justify-center'>
-        <h1 className='text-white font-bold text-[25px]'>chatly</h1>
-
-        <div className='flex justify-between items-center'>
-          <h1 className='text-gray-800 font-bold text-[25px]'>
-            Hii , {userData?.name || userData?.userName}
-          </h1>
-
-          <div className='w-[60px] h-[60px] rounded-full bg-white shadow-lg overflow-hidden'>
-            <img src={userData?.image || dp} alt="" className='h-full w-full object-cover'/>
+          {/* Action buttons (Search & Logout) */}
+          <div className="flex items-center gap-2">
+            <button 
+              type="button"
+              onClick={() => setSearch(!search)}
+              className="w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center cursor-pointer transition-all active:scale-95"
+              title="Search Users"
+            >
+              <IoIosSearch className="w-5 h-5 text-white" />
+            </button>
+            <button 
+              type="button"
+              onClick={handleLogout}
+              className="w-10 h-10 rounded-full bg-white/20 hover:bg-red-500/80 flex items-center justify-center cursor-pointer transition-all active:scale-95"
+              title="Logout"
+            >
+              <BiLogOutCircle className="w-5 h-5 text-white" />
+            </button>
           </div>
         </div>
 
-        {/* Search */}
-        <div className='mt-[20px]'>
-          {!search && (
-            <div
-              className='w-[60px] h-[60px] rounded-full bg-white shadow-lg flex justify-center items-center cursor-pointer'
-              onClick={() => setSearch(true)}
-            >
-              <IoIosSearch className='w-[25px] h-[25px]'/>
-            </div>
-          )}
-
-          {search && (
-            <div className='w-full h-[60px] bg-white rounded-full shadow-lg flex items-center px-[20px] gap-[10px]'>
-              <IoIosSearch className='w-[25px] h-[25px]'/>
-              <input
-                type="text"
-                placeholder='search users...'
-                className='w-full outline-none bg-transparent'
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-              />
-              <RxCross2
-                className='cursor-pointer'
-                onClick={() => {
-                  setSearch(false)
-                  setInput("")
-                }}
-              />
-            </div>
-          )}
-        </div>
+        {/* Expandable Search Input */}
+        {search && (
+          <div className="mt-3 w-full bg-white rounded-xl shadow-inner flex items-center px-3 py-2 gap-2 animate-fadeIn">
+            <IoIosSearch className="w-5 h-5 text-gray-400 shrink-0" />
+            <input
+              type="text"
+              placeholder="Search users..."
+              className="w-full text-sm outline-none bg-transparent text-gray-800 placeholder-gray-400"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              autoFocus
+            />
+            <RxCross2
+              className="w-5 h-5 text-gray-400 hover:text-gray-600 cursor-pointer shrink-0"
+              onClick={() => {
+                setSearch(false);
+                setInput("");
+              }}
+            />
+          </div>
+        )}
       </div>
 
-      {/* Users List */}
-      <div className='w-full h-[50%] overflow-auto flex flex-col gap-[15px] mt-[20px] items-center'>
+      {/* Users List Heading / Subtitle */}
+      <div className="px-4 pt-3 pb-1 flex justify-between items-center text-xs font-semibold text-gray-500 uppercase tracking-wider">
+        <span>Conversations ({filteredUsers?.length || 0})</span>
+      </div>
+
+      {/* Users List Container */}
+      <div className="w-full flex-1 overflow-y-auto px-3 py-2 space-y-2">
         {filteredUsers?.length > 0 ? (
-          filteredUsers.map(user => (
-            <div
-              key={user._id}
-              className={`w-[95%] h-[60px] min-h-[60px] bg-white shadow-lg rounded-full flex items-center gap-[20px] px-[20px] hover:bg-[#78cae5] cursor-pointer ${selectedUser?._id === user._id ? "bg-[#78cae5]" : ""}`}
-              onClick={() => dispatch(setSelectedUser(user))}
-            >
-              <div className='relative'>
-                <div className='w-[50px] h-[50px] rounded-full overflow-hidden'>
-                  <img src={user.image || dp} alt="" className='h-full w-full object-cover'/>
+          filteredUsers.map((user) => {
+            const isUserOnline = onlineUsers?.includes(user._id);
+            const isSelected = selectedUser?._id === user._id;
+
+            return (
+              <div
+                key={user._id}
+                onClick={() => dispatch(setSelectedUser(user))}
+                className={`w-full p-3 rounded-2xl flex items-center gap-3 cursor-pointer transition-all ${
+                  isSelected
+                    ? "bg-[#20c7ff] text-white shadow-md"
+                    : "bg-white hover:bg-slate-50 text-gray-800 shadow-sm border border-gray-100 hover:border-gray-200"
+                }`}
+              >
+                {/* Avatar with Online Badge */}
+                <div className="relative shrink-0">
+                  <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-100 border border-gray-200">
+                    <img src={user.image || dp} alt="" className="w-full h-full object-cover" />
+                  </div>
+                  {isUserOnline && (
+                    <span className="w-3.5 h-3.5 bg-emerald-400 border-2 border-white rounded-full absolute bottom-0 right-0 shadow-sm"></span>
+                  )}
                 </div>
 
-                {/* Real-time online status */}
-                {onlineUsers?.includes(user._id) && (
-                  <span className='w-[14px] h-[14px] bg-[#3aff20] border-2 border-white rounded-full absolute bottom-[2px] right-0 shadow-sm'></span>
-                )}
+                {/* User Details */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <h2 className="font-semibold text-base truncate">
+                      {user.name || user.userName}
+                    </h2>
+                    {isUserOnline ? (
+                      <span className={`text-[11px] font-medium ${isSelected ? "text-white/90" : "text-emerald-500"}`}>
+                        Online
+                      </span>
+                    ) : (
+                      <span className={`text-[11px] ${isSelected ? "text-white/70" : "text-gray-400"}`}>
+                        Offline
+                      </span>
+                    )}
+                  </div>
+                  <p className={`text-xs truncate ${isSelected ? "text-white/80" : "text-gray-400"}`}>
+                    @{user.userName}
+                  </p>
+                </div>
               </div>
-
-              <h1 className='text-gray-800 font-semibold text-[18px]'>
-                {user.name || user.userName}
-              </h1>
-            </div>
-          ))
+            );
+          })
         ) : (
-          <p className='text-gray-500 mt-10'>No users found</p>
+          <div className="w-full text-center py-16 flex flex-col items-center justify-center text-gray-400 text-sm">
+            <p>No users found</p>
+          </div>
         )}
       </div>
 
     </div>
-  )
+  );
 }
 
-export default SideBar
+export default SideBar;
