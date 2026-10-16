@@ -1,13 +1,21 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { IoIosArrowRoundBack } from "react-icons/io";
-import { IoInformationCircleOutline, IoVideocam } from "react-icons/io5";
-import { MdGroups, MdRecordVoiceOver } from "react-icons/md";
+import {
+  IoInformationCircleOutline,
+  IoVideocam,
+  IoSearch,
+  IoClose,
+  IoChevronUp,
+  IoChevronDown,
+} from "react-icons/io5";
+import { MdGroups, MdRecordVoiceOver, MdOutlineReply, MdOutlineEdit, MdClose } from "react-icons/md";
 import dp from "../assets/dp.webp";
 import { RiEmojiStickerLine, RiSendPlane2Fill } from "react-icons/ri";
 import { FaImages, FaPlay, FaPause, FaStop, FaMicrophone, FaTrash } from "react-icons/fa6";
 import EmojiPicker from "emoji-picker-react";
 import SenderMessage from "./SenderMessage";
 import ReceiverMessage from "./ReceiverMessage";
+import ForwardModal from "./ForwardModal";
 import { useDispatch, useSelector } from "react-redux";
 import { setMessages, setSelectedUser, setSelectedGroup } from "@/redux/userSlice";
 import axios from "axios";
@@ -32,6 +40,19 @@ function MessageArea() {
   const [isGroupInfoOpen, setIsGroupInfoOpen] = useState(false);
   const [voiceError, setVoiceError] = useState("");
   const [showPermissionModal, setShowPermissionModal] = useState(false);
+
+  // 🔹 Reply, Edit, Forward & Reaction States
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [editingMessage, setEditingMessage] = useState(null);
+  const [forwardingMessage, setForwardingMessage] = useState(null);
+  const [isForwardOpen, setIsForwardOpen] = useState(false);
+  const [highlightedMessageId, setHighlightedMessageId] = useState(null);
+
+  // 🔹 In-Chat Search States
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchMatches, setSearchMatches] = useState([]);
+  const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
 
   // 🔹 Speech-to-Text (Voice Typing) States
   const [isListening, setIsListening] = useState(false);
@@ -141,12 +162,60 @@ function MessageArea() {
       }
     };
 
+    // 🔹 Real-time edit listener
+    const handleMessageEdited = ({ message }) => {
+      if (!message) return;
+      dispatch(
+        setMessages(
+          messages.map((m) => (String(m._id) === String(message._id) ? message : m))
+        )
+      );
+    };
+
+    // 🔹 Real-time delete listener
+    const handleMessageDeleted = ({ messageId }) => {
+      if (!messageId) return;
+      dispatch(
+        setMessages(
+          messages.map((m) =>
+            String(m._id) === String(messageId)
+              ? {
+                  ...m,
+                  isDeleted: true,
+                  message: "This message was deleted",
+                  image: "",
+                  audio: "",
+                  reactions: [],
+                }
+              : m
+          )
+        )
+      );
+    };
+
+    // 🔹 Real-time reaction listener
+    const handleMessageReaction = ({ messageId, reactions }) => {
+      if (!messageId) return;
+      dispatch(
+        setMessages(
+          messages.map((m) =>
+            String(m._id) === String(messageId)
+              ? { ...m, reactions }
+              : m
+          )
+        )
+      );
+    };
+
     socket.on("typing", handleTyping);
     socket.on("stop_typing", handleStopTyping);
     socket.on("newMessage", handleNewMessage);
     socket.on("group_typing", handleGroupTyping);
     socket.on("group_stop_typing", handleGroupStopTyping);
     socket.on("newGroupMessage", handleNewGroupMessage);
+    socket.on("messageEdited", handleMessageEdited);
+    socket.on("messageDeleted", handleMessageDeleted);
+    socket.on("messageReaction", handleMessageReaction);
 
     return () => {
       socket.off("typing", handleTyping);
@@ -155,6 +224,9 @@ function MessageArea() {
       socket.off("group_typing", handleGroupTyping);
       socket.off("group_stop_typing", handleGroupStopTyping);
       socket.off("newGroupMessage", handleNewGroupMessage);
+      socket.off("messageEdited", handleMessageEdited);
+      socket.off("messageDeleted", handleMessageDeleted);
+      socket.off("messageReaction", handleMessageReaction);
     };
   }, [socket, selectedUser?._id, selectedGroup?._id, messages, userData?._id, dispatch]);
 
@@ -163,8 +235,16 @@ function MessageArea() {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping, groupTypingUser]);
 
-  // Clean up recording on unmount or chat switch
+  // Clean up recording, search & state on unmount or chat switch
   useEffect(() => {
+    setReplyingTo(null);
+    setEditingMessage(null);
+    setForwardingMessage(null);
+    setIsForwardOpen(false);
+    setIsSearchOpen(false);
+    setSearchQuery("");
+    setSearchMatches([]);
+    setHighlightedMessageId(null);
     return () => {
       if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
       if (recognitionRef.current) recognitionRef.current.stop();
@@ -393,6 +473,140 @@ function MessageArea() {
     }
   };
 
+  // 🔹 Reply action
+  const handleReply = (msg) => {
+    setEditingMessage(null);
+    setReplyingTo(msg);
+  };
+
+  const handleCancelReply = () => {
+    setReplyingTo(null);
+  };
+
+  // 🔹 Edit action
+  const handleEdit = (msg) => {
+    setReplyingTo(null);
+    setEditingMessage(msg);
+    setInput(msg.message || "");
+  };
+
+  const handleCancelEdit = () => {
+    setEditingMessage(null);
+    setInput("");
+  };
+
+  // 🔹 Delete action
+  const handleDelete = async (messageId) => {
+    if (!window.confirm("Are you sure you want to delete this message for everyone?")) return;
+    try {
+      await axios.delete(`${server_url}/api/message/delete/${messageId}`, {
+        withCredentials: true,
+      });
+      dispatch(
+        setMessages(
+          messages.map((m) =>
+            String(m._id) === String(messageId)
+              ? {
+                  ...m,
+                  isDeleted: true,
+                  message: "This message was deleted",
+                  image: "",
+                  audio: "",
+                  reactions: [],
+                }
+              : m
+          )
+        )
+      );
+    } catch (err) {
+      console.error("Delete message error:", err);
+    }
+  };
+
+  // 🔹 Reaction action
+  const handleReact = async (messageId, emoji) => {
+    try {
+      const res = await axios.post(
+        `${server_url}/api/message/react/${messageId}`,
+        { emoji },
+        { withCredentials: true }
+      );
+      dispatch(
+        setMessages(
+          messages.map((m) =>
+            String(m._id) === String(messageId)
+              ? { ...m, reactions: res.data }
+              : m
+          )
+        )
+      );
+    } catch (err) {
+      console.error("Reaction error:", err);
+    }
+  };
+
+  // 🔹 Forward action
+  const handleForward = (msg) => {
+    setForwardingMessage(msg);
+    setIsForwardOpen(true);
+  };
+
+  // 🔹 Jump / Scroll to Message with glowing highlight
+  const handleScrollToMessage = (targetId) => {
+    if (!targetId) return;
+    const elem = document.getElementById(`msg-${targetId}`);
+    if (elem) {
+      elem.scrollIntoView({ behavior: "smooth", block: "center" });
+      setHighlightedMessageId(targetId);
+      setTimeout(() => setHighlightedMessageId(null), 2500);
+    }
+  };
+
+  // 🔹 In-chat Search Handlers
+  const handleSearchChange = (val) => {
+    setSearchQuery(val);
+    if (!val.trim()) {
+      setSearchMatches([]);
+      setCurrentMatchIndex(0);
+      setHighlightedMessageId(null);
+      return;
+    }
+    const q = val.toLowerCase().trim();
+    const matches = (messages || []).filter(
+      (m) => !m.isDeleted && m.message && m.message.toLowerCase().includes(q)
+    );
+    setSearchMatches(matches);
+    if (matches.length > 0) {
+      setCurrentMatchIndex(0);
+      handleScrollToMessage(matches[0]._id);
+    } else {
+      setCurrentMatchIndex(0);
+      setHighlightedMessageId(null);
+    }
+  };
+
+  const goToNextMatch = () => {
+    if (searchMatches.length === 0) return;
+    const nextIdx = (currentMatchIndex + 1) % searchMatches.length;
+    setCurrentMatchIndex(nextIdx);
+    handleScrollToMessage(searchMatches[nextIdx]._id);
+  };
+
+  const goToPrevMatch = () => {
+    if (searchMatches.length === 0) return;
+    const prevIdx = (currentMatchIndex - 1 + searchMatches.length) % searchMatches.length;
+    setCurrentMatchIndex(prevIdx);
+    handleScrollToMessage(searchMatches[prevIdx]._id);
+  };
+
+  const closeSearch = () => {
+    setIsSearchOpen(false);
+    setSearchQuery("");
+    setSearchMatches([]);
+    setCurrentMatchIndex(0);
+    setHighlightedMessageId(null);
+  };
+
   // 🔹 SEND AUDIO MESSAGE
   const handleSendAudio = async () => {
     if (!recordedAudioBlob) return;
@@ -404,6 +618,9 @@ function MessageArea() {
       const formData = new FormData();
       formData.append("audio", recordedAudioBlob, "voice_message.webm");
       formData.append("audioDuration", String(recordingDuration || 1));
+      if (replyingTo) {
+        formData.append("replyTo", replyingTo._id);
+      }
 
       let res;
       if (isGroupChat) {
@@ -431,6 +648,7 @@ function MessageArea() {
         dispatch(setMessages([...messages, res.data]));
       }
 
+      setReplyingTo(null);
       cancelRecording();
     } catch (err) {
       console.error("Audio upload error:", err);
@@ -441,7 +659,7 @@ function MessageArea() {
     }
   };
 
-  // 🔹 SEND TEXT / IMAGE MESSAGE
+  // 🔹 SEND TEXT / IMAGE MESSAGE OR EDIT EXISTING
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!input.trim() && !backendImage) return;
@@ -456,11 +674,37 @@ function MessageArea() {
       }
     }
 
+    // 🔹 If currently EDITING a message
+    if (editingMessage) {
+      try {
+        const res = await axios.put(
+          `${server_url}/api/message/edit/${editingMessage._id}`,
+          { newContent: input.trim() },
+          { withCredentials: true }
+        );
+        dispatch(
+          setMessages(
+            messages.map((m) =>
+              String(m._id) === String(editingMessage._id) ? res.data : m
+            )
+          )
+        );
+        setInput("");
+        setEditingMessage(null);
+      } catch (err) {
+        console.error("Edit message error:", err);
+      }
+      return;
+    }
+
     try {
       const formData = new FormData();
       formData.append("message", input.trim());
       if (backendImage) {
         formData.append("image", backendImage);
+      }
+      if (replyingTo) {
+        formData.append("replyTo", replyingTo._id);
       }
 
       if (isGroupChat) {
@@ -491,6 +735,7 @@ function MessageArea() {
       setInput("");
       setFrontendImage(null);
       setBackendImage(null);
+      setReplyingTo(null);
     } catch (error) {
       console.log(error);
     }
@@ -519,76 +764,134 @@ function MessageArea() {
           
           {/* Header */}
           <div className="w-full h-[65px] sm:h-[75px] bg-[#1797c2] shadow-md flex items-center justify-between px-3 sm:px-5 shrink-0 z-10">
-            <div className="flex items-center gap-3 min-w-0">
-              <button 
-                type="button"
-                className="w-10 h-10 rounded-full hover:bg-white/10 active:scale-95 flex items-center justify-center cursor-pointer text-white transition-all shrink-0"
-                onClick={handleBack}
-                title="Back to chat list"
-              >
-                <IoIosArrowRoundBack className="w-8 h-8 text-white" />
-              </button>
+            {isSearchOpen ? (
+              /* 🔍 IN-CHAT SEARCH BAR */
+              <div className="flex-1 flex items-center gap-2 bg-white/20 backdrop-blur-md rounded-2xl px-3 py-1.5 text-white animate-fadeIn mr-2">
+                <IoSearch className="w-5 h-5 text-white/80 shrink-0" />
+                <input
+                  type="text"
+                  autoFocus
+                  placeholder="Search messages in this chat..."
+                  value={searchQuery}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  className="w-full bg-transparent outline-none text-white placeholder-white/70 text-sm sm:text-base"
+                />
+                {searchMatches.length > 0 && (
+                  <div className="flex items-center gap-1 shrink-0 text-xs text-white/90 font-medium">
+                    <span className="px-1.5 py-0.5 bg-black/20 rounded-full text-[11px]">
+                      {currentMatchIndex + 1}/{searchMatches.length}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={goToPrevMatch}
+                      className="p-1 hover:bg-white/20 rounded-full cursor-pointer transition-all"
+                      title="Previous match"
+                    >
+                      <IoChevronUp className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={goToNextMatch}
+                      className="p-1 hover:bg-white/20 rounded-full cursor-pointer transition-all"
+                      title="Next match"
+                    >
+                      <IoChevronDown className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={closeSearch}
+                  className="p-1 hover:bg-white/20 rounded-full cursor-pointer transition-all shrink-0"
+                  title="Close search"
+                >
+                  <IoClose className="w-5 h-5" />
+                </button>
+              </div>
+            ) : (
+              /* STANDARD CHAT HEADER (Avatar + Title + Status) */
+              <div className="flex items-center gap-3 min-w-0">
+                <button 
+                  type="button"
+                  className="w-10 h-10 rounded-full hover:bg-white/10 active:scale-95 flex items-center justify-center cursor-pointer text-white transition-all shrink-0"
+                  onClick={handleBack}
+                  title="Back to chat list"
+                >
+                  <IoIosArrowRoundBack className="w-8 h-8 text-white" />
+                </button>
 
-              {/* Chat Avatar */}
-              <div className="relative shrink-0">
-                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full overflow-hidden bg-white shadow-sm border border-white/60 flex items-center justify-center">
-                  {isGroupChat ? (
-                    selectedGroup.profileImage ? (
-                      <img src={selectedGroup.profileImage} alt="" className="h-full w-full object-cover" />
+                {/* Chat Avatar */}
+                <div className="relative shrink-0">
+                  <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full overflow-hidden bg-white shadow-sm border border-white/60 flex items-center justify-center">
+                    {isGroupChat ? (
+                      selectedGroup.profileImage ? (
+                        <img src={selectedGroup.profileImage} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        <MdGroups className="w-7 h-7 text-[#1797c2]" />
+                      )
                     ) : (
-                      <MdGroups className="w-7 h-7 text-[#1797c2]" />
-                    )
-                  ) : (
-                    <img src={selectedUser.image || dp} alt="" className="h-full w-full object-cover" />
+                      <img src={selectedUser.image || dp} alt="" className="h-full w-full object-cover" />
+                    )}
+                  </div>
+                  {!isGroupChat && isOnline && (
+                    <span className="w-3 h-3 bg-emerald-400 border-2 border-white rounded-full absolute bottom-0 right-0 shadow-sm"></span>
                   )}
                 </div>
-                {!isGroupChat && isOnline && (
-                  <span className="w-3 h-3 bg-emerald-400 border-2 border-white rounded-full absolute bottom-0 right-0 shadow-sm"></span>
-                )}
-              </div>
 
-              {/* Chat Title & Status */}
-              <div className="flex flex-col min-w-0">
-                <h1 className="text-white font-semibold text-base sm:text-lg leading-tight truncate max-w-[150px] sm:max-w-[280px]">
-                  {isGroupChat ? selectedGroup.name : (selectedUser.name || selectedUser.userName)}
-                </h1>
-                
-                {isGroupChat ? (
-                  groupTypingUser ? (
-                    <span className="text-xs text-white/95 font-medium italic animate-pulse">
-                      {groupTypingUser} is typing...
-                    </span>
+                {/* Chat Title & Status */}
+                <div className="flex flex-col min-w-0">
+                  <h1 className="text-white font-semibold text-base sm:text-lg leading-tight truncate max-w-[150px] sm:max-w-[280px]">
+                    {isGroupChat ? selectedGroup.name : (selectedUser.name || selectedUser.userName)}
+                  </h1>
+                  
+                  {isGroupChat ? (
+                    groupTypingUser ? (
+                      <span className="text-xs text-white/95 font-medium italic animate-pulse">
+                        {groupTypingUser} is typing...
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-white/80 truncate">
+                        {selectedGroup.members?.length || 0} members
+                      </span>
+                    )
                   ) : (
-                    <span className="text-[11px] text-white/80 truncate">
-                      {selectedGroup.members?.length || 0} members
-                    </span>
-                  )
-                ) : (
-                  isTyping ? (
-                    <span className="text-xs text-white/95 font-medium italic flex items-center gap-1 animate-pulse">
-                      typing...
-                    </span>
-                  ) : isOnline ? (
-                    <span className="text-[11px] text-emerald-300 font-medium">Online</span>
-                  ) : (
-                    <span className="text-[11px] text-white/70">Offline</span>
-                  )
-                )}
+                    isTyping ? (
+                      <span className="text-xs text-white/95 font-medium italic flex items-center gap-1 animate-pulse">
+                        typing...
+                      </span>
+                    ) : isOnline ? (
+                      <span className="text-[11px] text-emerald-300 font-medium">Online</span>
+                    ) : (
+                      <span className="text-[11px] text-white/70">Offline</span>
+                    )
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Header Right Actions */}
-            {isGroupChat ? (
-              <button
-                type="button"
-                onClick={() => setIsGroupInfoOpen(true)}
-                className="w-10 h-10 rounded-full hover:bg-white/20 active:scale-95 flex items-center justify-center cursor-pointer text-white transition-all shrink-0"
-                title="View Group Info"
-              >
-                <IoInformationCircleOutline className="w-6 h-6 text-white" />
-              </button>
-            ) : (
-              <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1">
+              {!isSearchOpen && (
+                <button
+                  type="button"
+                  onClick={() => setIsSearchOpen(true)}
+                  className="w-10 h-10 rounded-full hover:bg-white/20 active:scale-95 flex items-center justify-center cursor-pointer text-white transition-all shrink-0"
+                  title="Search messages"
+                >
+                  <IoSearch className="w-5 h-5 text-white" />
+                </button>
+              )}
+
+              {isGroupChat ? (
+                <button
+                  type="button"
+                  onClick={() => setIsGroupInfoOpen(true)}
+                  className="w-10 h-10 rounded-full hover:bg-white/20 active:scale-95 flex items-center justify-center cursor-pointer text-white transition-all shrink-0"
+                  title="View Group Info"
+                >
+                  <IoInformationCircleOutline className="w-6 h-6 text-white" />
+                </button>
+              ) : (
                 <button
                   type="button"
                   onClick={() => startCall(selectedUser, "video")}
@@ -597,8 +900,8 @@ function MessageArea() {
                 >
                   <IoVideocam className="w-5 h-5 text-white" />
                 </button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           {/* Voice Error Toast Alert */}
@@ -628,20 +931,28 @@ function MessageArea() {
                 <div key={mess._id || index} ref={index === messages.length - 1 ? scrollRef : null}>
                   {isMine ? (
                     <SenderMessage
-                      image={mess.image}
-                      message={mess.message}
-                      audio={mess.audio}
-                      audioDuration={mess.audioDuration}
+                      messageObj={mess}
                       userImage={userData?.image}
+                      onReply={handleReply}
+                      onEdit={handleEdit}
+                      onDelete={handleDelete}
+                      onReact={handleReact}
+                      onForward={handleForward}
+                      onScrollToMessage={handleScrollToMessage}
+                      currentUserId={userData?._id}
+                      isHighlighted={highlightedMessageId === mess._id}
                     />
                   ) : (
                     <ReceiverMessage
-                      image={mess.image}
-                      message={mess.message}
-                      audio={mess.audio}
-                      audioDuration={mess.audioDuration}
+                      messageObj={mess}
                       userImage={isGroupChat ? (mess.sender?.image || dp) : (selectedUser?.image || dp)}
                       senderName={isGroupChat ? (mess.sender?.name || mess.sender?.userName) : null}
+                      onReply={handleReply}
+                      onReact={handleReact}
+                      onForward={handleForward}
+                      onScrollToMessage={handleScrollToMessage}
+                      currentUserId={userData?._id}
+                      isHighlighted={highlightedMessageId === mess._id}
                     />
                   )}
                 </div>
@@ -666,8 +977,60 @@ function MessageArea() {
           </div>
 
           {/* Input Area */}
-          <div className="w-full p-2.5 sm:p-4 bg-white/95 backdrop-blur-md border-t border-gray-300 shrink-0 flex items-center justify-center relative">
+          <div className="w-full p-2.5 sm:p-4 bg-white/95 backdrop-blur-md border-t border-gray-300 shrink-0 flex flex-col items-center justify-center relative">
             
+            {/* 💬 REPLY PREVIEW BANNER */}
+            {replyingTo && (
+              <div className="w-full max-w-4xl bg-white/95 backdrop-blur-md border border-cyan-200 border-b-0 rounded-t-2xl p-2 sm:p-2.5 px-4 flex items-center justify-between shadow-sm animate-fadeIn -mb-1">
+                <div className="flex items-center gap-2.5 overflow-hidden">
+                  <div className="w-7 h-7 rounded-full bg-cyan-100 flex items-center justify-center text-[#1797c2] shrink-0">
+                    <MdOutlineReply className="w-4 h-4" />
+                  </div>
+                  <div className="flex flex-col text-xs min-w-0">
+                    <span className="font-bold text-[#1797c2] truncate">
+                      Replying to {replyingTo.sender?.name || replyingTo.sender?.userName || "message"}
+                    </span>
+                    <span className="text-gray-600 truncate text-[11px]">
+                      {replyingTo.message || (replyingTo.audio ? "🎙️ Voice note" : "📷 Photo")}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCancelReply}
+                  className="p-1 rounded-full hover:bg-gray-100 text-gray-500 hover:text-red-500 transition-all cursor-pointer"
+                  title="Cancel reply"
+                >
+                  <IoClose className="w-5 h-5" />
+                </button>
+              </div>
+            )}
+
+            {/* ✏️ EDIT MESSAGE BANNER */}
+            {editingMessage && (
+              <div className="w-full max-w-4xl bg-amber-50/95 backdrop-blur-md border border-amber-200 border-b-0 rounded-t-2xl p-2 sm:p-2.5 px-4 flex items-center justify-between shadow-sm animate-fadeIn -mb-1">
+                <div className="flex items-center gap-2.5 overflow-hidden">
+                  <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 shrink-0">
+                    <MdOutlineEdit className="w-4 h-4" />
+                  </div>
+                  <div className="flex flex-col text-xs min-w-0">
+                    <span className="font-bold text-amber-700">Editing Message</span>
+                    <span className="text-gray-600 truncate text-[11px]">
+                      {editingMessage.message}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCancelEdit}
+                  className="p-1 rounded-full hover:bg-amber-100 text-gray-500 hover:text-red-500 transition-all cursor-pointer"
+                  title="Cancel edit"
+                >
+                  <IoClose className="w-5 h-5" />
+                </button>
+              </div>
+            )}
+
             {/* Image Preview Thumbnail */}
             {frontendImage && (
               <div className="absolute bottom-[75px] left-4 bg-white p-1 rounded-xl shadow-xl border border-gray-200 animate-fadeIn z-20">
@@ -861,7 +1224,9 @@ function MessageArea() {
                 <input
                   type="text"
                   placeholder={
-                    isListening
+                    editingMessage
+                      ? "Edit message content..."
+                      : isListening
                       ? "Listening... Speak now 🎙️"
                       : isGroupChat
                       ? `Message #${selectedGroup.name}...`
@@ -874,22 +1239,26 @@ function MessageArea() {
                   }`}
                 />
 
-                {/* Image Upload Button */}
-                <button
-                  type="button"
-                  className="text-gray-500 hover:text-[#1797c2] cursor-pointer shrink-0 p-1"
-                  onClick={() => imageRef.current.click()}
-                  title="Send Image"
-                >
-                  <FaImages className="w-5 h-5" />
-                </button>
+                {/* Image Upload Button (disabled during edit) */}
+                {!editingMessage && (
+                  <button
+                    type="button"
+                    className="text-gray-500 hover:text-[#1797c2] cursor-pointer shrink-0 p-1"
+                    onClick={() => imageRef.current.click()}
+                    title="Send Image"
+                  >
+                    <FaImages className="w-5 h-5" />
+                  </button>
+                )}
 
-                {/* WhatsApp Style Mic (Record Voice Note) OR Send Message */}
-                {input.trim() || frontendImage ? (
+                {/* WhatsApp Style Mic (Record Voice Note) OR Send / Save Button */}
+                {input.trim() || frontendImage || editingMessage ? (
                   <button 
                     type="submit" 
-                    className="w-10 h-10 rounded-full bg-[#1797c2] hover:bg-[#1280a5] text-white flex items-center justify-center shrink-0 shadow-md cursor-pointer transition-all active:scale-95"
-                    title="Send"
+                    className={`w-10 h-10 rounded-full text-white flex items-center justify-center shrink-0 shadow-md cursor-pointer transition-all active:scale-95 ${
+                      editingMessage ? "bg-amber-500 hover:bg-amber-600" : "bg-[#1797c2] hover:bg-[#1280a5]"
+                    }`}
+                    title={editingMessage ? "Save edit" : "Send"}
                   >
                     <RiSendPlane2Fill className="w-4 h-4 ml-0.5" />
                   </button>
@@ -920,6 +1289,17 @@ function MessageArea() {
           </p>
         </div>
       )}
+
+      {/* Forward Message Modal */}
+      <ForwardModal
+        isOpen={isForwardOpen}
+        onClose={() => {
+          setIsForwardOpen(false);
+          setForwardingMessage(null);
+        }}
+        messageToForward={forwardingMessage}
+        onForwardSuccess={() => {}}
+      />
 
       {/* Group Info Modal */}
       {selectedGroup && (

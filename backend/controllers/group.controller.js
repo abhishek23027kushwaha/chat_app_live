@@ -358,15 +358,21 @@ export const sendGroupMessage = async (req, res) => {
       image: image || "",
       audio: audio || "",
       audioDuration: Number(audioDuration) || 0,
+      replyTo: req.body.replyTo || null,
+      isForwarded: Boolean(req.body.isForwarded),
     });
 
     group.messages.push(newMessage._id);
     await group.save();
 
-    const populatedMessage = await Message.findById(newMessage._id).populate(
-      "sender",
-      "name userName image"
-    );
+    const populatedMessage = await Message.findById(newMessage._id)
+      .populate("sender", "name userName image")
+      .populate({
+        path: "replyTo",
+        select: "message image audio sender",
+        populate: { path: "sender", select: "name userName image" },
+      })
+      .populate("reactions.user", "name userName image");
 
     // Broadcast message to all group members
     group.members.forEach((memberId) => {
@@ -404,6 +410,12 @@ export const getGroupMessages = async (req, res) => {
 
     const messages = await Message.find({ groupId })
       .populate("sender", "name userName image")
+      .populate({
+        path: "replyTo",
+        select: "message image audio sender",
+        populate: { path: "sender", select: "name userName image" },
+      })
+      .populate("reactions.user", "name userName image")
       .sort({ createdAt: 1 });
 
     return res.status(200).json(messages);
