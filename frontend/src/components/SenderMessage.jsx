@@ -8,6 +8,7 @@ import {
   MdMoreVert,
 } from "react-icons/md";
 import { RiShareForwardFill } from "react-icons/ri";
+import { formatMessageTime } from "../utils/dateUtils";
 
 const QUICK_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 
@@ -36,7 +37,10 @@ function SenderMessage({
     isEdited,
     isDeleted,
     isForwarded,
+    createdAt,
   } = messageObj || {};
+
+  const formattedTime = formatMessageTime(createdAt);
 
   // Group reactions by emoji
   const groupedReactions = (reactions || []).reduce((acc, r) => {
@@ -193,11 +197,20 @@ function SenderMessage({
           message && (
             <div className="leading-snug break-words">
               <span>{message}</span>
-              {isEdited && (
-                <span className="text-[10px] text-white/70 italic ml-1.5">(edited)</span>
-              )}
             </div>
           )
+        )}
+
+        {/* Message Footer: Edited Label + Original Send Time in Local Timezone */}
+        {!isDeleted && (
+          <div className="flex items-center justify-end gap-1.5 text-[10px] text-white/80 self-end -mt-0.5 select-none font-medium">
+            {isEdited && (
+              <span className="italic opacity-90 text-[10px]">Edited</span>
+            )}
+            {formattedTime && (
+              <span>{formattedTime}</span>
+            )}
+          </div>
         )}
 
         {/* Reaction Badges Pill */}

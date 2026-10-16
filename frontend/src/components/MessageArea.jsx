@@ -24,6 +24,7 @@ import { useSocketContext } from "@/context/SocketContext";
 import { useCallContext } from "@/context/CallContext";
 import GroupInfoModal from "./GroupInfoModal";
 import MicPermissionModal from "./MicPermissionModal";
+import { formatChatDateSeparator, isDifferentDay } from "@/utils/dateUtils";
 
 function MessageArea() {
   const dispatch = useDispatch();
@@ -926,36 +927,51 @@ function MessageArea() {
             {messages?.map((mess, index) => {
               const senderId = mess.sender?._id || mess.sender;
               const isMine = String(senderId) === String(userData?._id);
+              const prevMessage = index > 0 ? messages[index - 1] : null;
+              const showDateSeparator =
+                index === 0 ||
+                isDifferentDay(prevMessage?.createdAt, mess?.createdAt);
 
               return (
-                <div key={mess._id || index} ref={index === messages.length - 1 ? scrollRef : null}>
-                  {isMine ? (
-                    <SenderMessage
-                      messageObj={mess}
-                      userImage={userData?.image}
-                      onReply={handleReply}
-                      onEdit={handleEdit}
-                      onDelete={handleDelete}
-                      onReact={handleReact}
-                      onForward={handleForward}
-                      onScrollToMessage={handleScrollToMessage}
-                      currentUserId={userData?._id}
-                      isHighlighted={highlightedMessageId === mess._id}
-                    />
-                  ) : (
-                    <ReceiverMessage
-                      messageObj={mess}
-                      userImage={isGroupChat ? (mess.sender?.image || dp) : (selectedUser?.image || dp)}
-                      senderName={isGroupChat ? (mess.sender?.name || mess.sender?.userName) : null}
-                      onReply={handleReply}
-                      onReact={handleReact}
-                      onForward={handleForward}
-                      onScrollToMessage={handleScrollToMessage}
-                      currentUserId={userData?._id}
-                      isHighlighted={highlightedMessageId === mess._id}
-                    />
+                <React.Fragment key={mess._id || index}>
+                  {/* 📅 Date Separator (Today, Yesterday, or Formatted Date) */}
+                  {showDateSeparator && (
+                    <div className="flex justify-center my-2.5 select-none">
+                      <span className="bg-white/80 backdrop-blur-md text-gray-600 text-[11px] font-semibold px-3 py-1 rounded-full shadow-xs border border-gray-200">
+                        {formatChatDateSeparator(mess?.createdAt || new Date())}
+                      </span>
+                    </div>
                   )}
-                </div>
+
+                  <div ref={index === messages.length - 1 ? scrollRef : null}>
+                    {isMine ? (
+                      <SenderMessage
+                        messageObj={mess}
+                        userImage={userData?.image}
+                        onReply={handleReply}
+                        onEdit={handleEdit}
+                        onDelete={handleDelete}
+                        onReact={handleReact}
+                        onForward={handleForward}
+                        onScrollToMessage={handleScrollToMessage}
+                        currentUserId={userData?._id}
+                        isHighlighted={highlightedMessageId === mess._id}
+                      />
+                    ) : (
+                      <ReceiverMessage
+                        messageObj={mess}
+                        userImage={isGroupChat ? (mess.sender?.image || dp) : (selectedUser?.image || dp)}
+                        senderName={isGroupChat ? (mess.sender?.name || mess.sender?.userName) : null}
+                        onReply={handleReply}
+                        onReact={handleReact}
+                        onForward={handleForward}
+                        onScrollToMessage={handleScrollToMessage}
+                        currentUserId={userData?._id}
+                        isHighlighted={highlightedMessageId === mess._id}
+                      />
+                    )}
+                  </div>
+                </React.Fragment>
               );
             })}
 
