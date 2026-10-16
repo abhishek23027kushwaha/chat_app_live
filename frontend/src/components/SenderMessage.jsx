@@ -8,6 +8,7 @@ import {
   MdMoreVert,
 } from "react-icons/md";
 import { RiShareForwardFill } from "react-icons/ri";
+import { IoCheckmark, IoCheckmarkDone } from "react-icons/io5";
 import { formatMessageTime } from "../utils/dateUtils";
 
 const QUICK_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
@@ -38,6 +39,8 @@ function SenderMessage({
     isDeleted,
     isForwarded,
     createdAt,
+    status = "sent",
+    groupId,
   } = messageObj || {};
 
   const formattedTime = formatMessageTime(createdAt);
@@ -201,14 +204,29 @@ function SenderMessage({
           )
         )}
 
-        {/* Message Footer: Edited Label + Original Send Time in Local Timezone */}
+        {/* Message Footer: Edited Label + Original Send Time + Status Ticks */}
         {!isDeleted && (
-          <div className="flex items-center justify-end gap-1.5 text-[10px] text-white/80 self-end -mt-0.5 select-none font-medium">
+          <div className="flex items-center justify-end gap-1 text-[10px] text-white/80 self-end -mt-0.5 select-none font-medium">
             {isEdited && (
               <span className="italic opacity-90 text-[10px]">Edited</span>
             )}
             {formattedTime && (
               <span>{formattedTime}</span>
+            )}
+            {/* Status Ticks for 1-to-1 chats */}
+            {!groupId && (
+              <span
+                className="flex items-center ml-0.5"
+                title={status === "read" ? "Read" : status === "delivered" ? "Delivered" : "Sent"}
+              >
+                {status === "read" ? (
+                  <IoCheckmarkDone className="w-3.5 h-3.5 text-cyan-200" />
+                ) : status === "delivered" ? (
+                  <IoCheckmarkDone className="w-3.5 h-3.5 text-white/70" />
+                ) : (
+                  <IoCheckmark className="w-3 h-3 text-white/70" />
+                )}
+              </span>
             )}
           </div>
         )}

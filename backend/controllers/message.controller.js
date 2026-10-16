@@ -78,11 +78,26 @@ export const sendMessage = async (req, res) => {
   }
 };
 
-// 🔹 2. Get Messages with Full Population
+// 🔹 2. Get Messages with Full Population & Mark as Read
 export const getMessages = async (req, res) => {
   try {
     const userToChatId = req.params.id;
     const senderId = req.userId;
+
+    // Mark any unread incoming messages from userToChatId as READ
+    await Message.updateMany(
+      {
+        sender: userToChatId,
+        receiver: senderId,
+        status: { $ne: "read" },
+      },
+      { status: "read", readAt: new Date() }
+    );
+
+    const chatterSockets = getReceiverSocketId(userToChatId);
+    chatterSockets.forEach((sId) => {
+      io.to(sId).emit("messagesRead", { readerId: senderId });
+    });
 
     const conversation = await Conversation.findOne({
       partcipants: { $all: [senderId, userToChatId] },
@@ -413,3 +428,31 @@ export const searchMessages = async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 };
+
+// 🔹 8. Mark Messages as Read
+export const markMessagesAsRead = async (req, res) => {
+  try {
+    const senderId = req.params.senderId;
+    const userId = req.userId;
+
+    await Message.updateMany(
+      {
+        sender: senderId,
+        receiver: userId,
+        status: { $ne: "read" },
+      },
+      { status: "read", readAt: new Date() }
+    );
+
+    const senderSockets = getReceiverSocketId(senderId);
+    senderSockets.forEach((sId) => {
+      io.to(sId).emit("messagesRead", { readerId: userId });
+    });
+
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    console.log("Error in markMessagesAsRead: ", error.message);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+

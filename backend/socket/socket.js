@@ -1,6 +1,7 @@
 import { Server } from "socket.io";
 import http from "http";
 import express from "express";
+import Message from "../models/message.model.js";
 
 const app = express();
 const server = http.createServer(app);
@@ -41,6 +42,35 @@ export const getReceiverSocketId = (receiverId) => {
   return [];
 };
 
+// Helper: Deliver pending offline messages when user comes online
+const deliverPendingMessages = async (uid) => {
+  try {
+    const pending = await Message.find({ receiver: uid, status: "sent" }).select("_id sender");
+    if (pending && pending.length > 0) {
+      await Message.updateMany(
+        { receiver: uid, status: "sent" },
+        { status: "delivered", deliveredAt: new Date() }
+      );
+
+      const senderGroup = {};
+      pending.forEach((m) => {
+        const s = String(m.sender);
+        if (!senderGroup[s]) senderGroup[s] = [];
+        senderGroup[s].push(String(m._id));
+      });
+
+      Object.entries(senderGroup).forEach(([sId, messageIds]) => {
+        const senderSockets = getReceiverSocketId(sId);
+        senderSockets.forEach((sockId) => {
+          io.to(sockId).emit("messagesDelivered", { messageIds, status: "delivered" });
+        });
+      });
+    }
+  } catch (e) {
+    console.log("Error delivering pending messages:", e);
+  }
+};
+
 io.on("connection", (socket) => {
   const rawUserId = socket.handshake.query.userId;
   const userId = rawUserId && rawUserId !== "undefined" && rawUserId !== "null" 
@@ -53,10 +83,54 @@ io.on("connection", (socket) => {
     }
     userSocketMap[userId].add(socket.id);
     console.log(`User connected: ${userId} (active sockets: ${userSocketMap[userId].size})`);
+    
+    // Automatically deliver any pending messages when user connects
+    deliverPendingMessages(userId);
   }
 
   // Broadcast all currently online users
   io.emit("getOnlineUsers", Object.keys(userSocketMap));
+
+  // 🔹 Message Delivered Event (Receiver device confirmed receipt)
+  socket.on("message_delivered", async ({ messageId, senderId }) => {
+    try {
+      if (!messageId) return;
+      await Message.findByIdAndUpdate(messageId, {
+        status: "delivered",
+        deliveredAt: new Date(),
+      });
+      if (senderId) {
+        const senderSockets = getReceiverSocketId(senderId);
+        senderSockets.forEach((sId) => {
+          io.to(sId).emit("messageDelivered", { messageId, status: "delivered" });
+        });
+      }
+    } catch (e) {
+      console.log("Error in message_delivered:", e);
+    }
+  });
+
+  // 🔹 Message Read Event (Receiver opened chat and read messages)
+  socket.on("mark_read", async ({ senderId }) => {
+    try {
+      if (!userId || !senderId) return;
+      await Message.updateMany(
+        {
+          sender: senderId,
+          receiver: userId,
+          status: { $ne: "read" },
+        },
+        { status: "read", readAt: new Date() }
+      );
+
+      const senderSockets = getReceiverSocketId(senderId);
+      senderSockets.forEach((sId) => {
+        io.to(sId).emit("messagesRead", { readerId: userId });
+      });
+    } catch (e) {
+      console.log("Error in mark_read socket event:", e);
+    }
+  });
 
   // Typing event
   socket.on("typing", ({ receiverId }) => {

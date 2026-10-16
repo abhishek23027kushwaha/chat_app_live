@@ -7,6 +7,7 @@ import {
   reactMessage,
   forwardMessage,
   searchMessages,
+  markMessagesAsRead,
 } from "../controllers/message.controller.js";
 import isAuth from "../middlewares/isAuth.js";
 import { upload } from "../middlewares/multer.js";
@@ -18,6 +19,7 @@ messageRouter.post("/forward", isAuth, forwardMessage);
 messageRouter.put("/edit/:id", isAuth, editMessage);
 messageRouter.delete("/delete/:id", isAuth, deleteMessage);
 messageRouter.post("/react/:id", isAuth, reactMessage);
+messageRouter.put("/read/:senderId", isAuth, markMessagesAsRead);
 messageRouter.get("/:id", isAuth, getMessages);
 messageRouter.post("/send/:id", isAuth, upload.any(), sendMessage);
 

@@ -92,6 +92,9 @@ function MessageArea() {
         try {
           const res = await axios.get(`${server_url}/api/message/${selectedUser._id}`, { withCredentials: true });
           dispatch(setMessages(res.data));
+          if (socket) {
+            socket.emit("mark_read", { senderId: selectedUser._id });
+          }
         } catch (error) {
           console.log(error);
         }
@@ -135,9 +138,66 @@ function MessageArea() {
     };
 
     const handleNewMessage = (newMessage) => {
-      if (selectedUser?._id && String(selectedUser._id) === String(newMessage.sender)) {
-        dispatch(setMessages([...messages, newMessage]));
+      const msgSenderId = newMessage.sender?._id || newMessage.sender;
+
+      // 1. Acknowledge delivery to sender
+      socket.emit("message_delivered", {
+        messageId: newMessage._id,
+        senderId: msgSenderId,
+      });
+
+      // 2. If chat with sender is currently open, mark read immediately
+      if (selectedUser?._id && String(selectedUser._id) === String(msgSenderId)) {
+        socket.emit("mark_read", { senderId: msgSenderId });
+        dispatch(setMessages([...messages, { ...newMessage, status: "read" }]));
         setIsTyping(false);
+      }
+    };
+
+    // 🔹 Single message delivered
+    const handleMessageDelivered = ({ messageId }) => {
+      if (!messageId) return;
+      dispatch(
+        setMessages(
+          messages.map((m) =>
+            String(m._id) === String(messageId) && m.status !== "read"
+              ? { ...m, status: "delivered" }
+              : m
+          )
+        )
+      );
+    };
+
+    // 🔹 Bulk messages delivered (receiver connected)
+    const handleMessagesDelivered = ({ messageIds }) => {
+      if (!messageIds || messageIds.length === 0) return;
+      const idSet = new Set(messageIds.map(String));
+      dispatch(
+        setMessages(
+          messages.map((m) =>
+            idSet.has(String(m._id)) && m.status !== "read"
+              ? { ...m, status: "delivered" }
+              : m
+          )
+        )
+      );
+    };
+
+    // 🔹 Messages read (Blue double tick)
+    const handleMessagesRead = ({ readerId }) => {
+      if (!readerId) return;
+      if (selectedUser?._id && String(selectedUser._id) === String(readerId)) {
+        dispatch(
+          setMessages(
+            messages.map((m) => {
+              const senderId = m.sender?._id || m.sender;
+              if (String(senderId) === String(userData?._id)) {
+                return { ...m, status: "read" };
+              }
+              return m;
+            })
+          )
+        );
       }
     };
 
@@ -211,6 +271,9 @@ function MessageArea() {
     socket.on("typing", handleTyping);
     socket.on("stop_typing", handleStopTyping);
     socket.on("newMessage", handleNewMessage);
+    socket.on("messageDelivered", handleMessageDelivered);
+    socket.on("messagesDelivered", handleMessagesDelivered);
+    socket.on("messagesRead", handleMessagesRead);
     socket.on("group_typing", handleGroupTyping);
     socket.on("group_stop_typing", handleGroupStopTyping);
     socket.on("newGroupMessage", handleNewGroupMessage);
@@ -222,6 +285,9 @@ function MessageArea() {
       socket.off("typing", handleTyping);
       socket.off("stop_typing", handleStopTyping);
       socket.off("newMessage", handleNewMessage);
+      socket.off("messageDelivered", handleMessageDelivered);
+      socket.off("messagesDelivered", handleMessagesDelivered);
+      socket.off("messagesRead", handleMessagesRead);
       socket.off("group_typing", handleGroupTyping);
       socket.off("group_stop_typing", handleGroupStopTyping);
       socket.off("newGroupMessage", handleNewGroupMessage);
