@@ -48,6 +48,13 @@ app.use("/api/user", userRouter);
 app.use("/api/message", messageRouter);
 app.use("/api/group", groupRouter);
 
+// Serve public directory statically
+const publicDir = path.resolve(_dirname, "public");
+if (!fs.existsSync(publicDir)) {
+  fs.mkdirSync(publicDir, { recursive: true });
+}
+app.use("/public", express.static(publicDir));
+
 // Serve frontend dist if available
 const frontendDistPath = path.resolve(_dirname, "frontend", "dist");
 if (fs.existsSync(frontendDistPath)) {
