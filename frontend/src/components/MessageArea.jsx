@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { IoIosArrowRoundBack } from "react-icons/io";
-import { IoInformationCircleOutline, IoVideocam, IoLanguage } from "react-icons/io5";
-import { MdGroups, MdMic, MdRecordVoiceOver, MdDeleteOutline } from "react-icons/md";
+import { IoInformationCircleOutline, IoVideocam } from "react-icons/io5";
+import { MdGroups, MdRecordVoiceOver } from "react-icons/md";
 import dp from "../assets/dp.webp";
-import { RiEmojiStickerLine, RiSendPlane2Fill, RiVoiceprintFill } from "react-icons/ri";
-import { FaImages, FaPlay, FaPause, FaStop } from "react-icons/fa6";
+import { RiEmojiStickerLine, RiSendPlane2Fill } from "react-icons/ri";
+import { FaImages, FaPlay, FaPause, FaStop, FaMicrophone, FaTrash } from "react-icons/fa6";
 import EmojiPicker from "emoji-picker-react";
 import SenderMessage from "./SenderMessage";
 import ReceiverMessage from "./ReceiverMessage";
@@ -15,6 +15,7 @@ import { server_url } from "@/utils/constant";
 import { useSocketContext } from "@/context/SocketContext";
 import { useCallContext } from "@/context/CallContext";
 import GroupInfoModal from "./GroupInfoModal";
+import MicPermissionModal from "./MicPermissionModal";
 
 function MessageArea() {
   const dispatch = useDispatch();
@@ -30,6 +31,7 @@ function MessageArea() {
   const [groupTypingUser, setGroupTypingUser] = useState(null);
   const [isGroupInfoOpen, setIsGroupInfoOpen] = useState(false);
   const [voiceError, setVoiceError] = useState("");
+  const [showPermissionModal, setShowPermissionModal] = useState(false);
 
   // 🔹 Speech-to-Text (Voice Typing) States
   const [isListening, setIsListening] = useState(false);
@@ -262,8 +264,9 @@ function MessageArea() {
       recognition.onerror = (err) => {
         console.warn("Speech recognition error:", err);
         if (err.error === "not-allowed") {
+          setShowPermissionModal(true);
           setVoiceError("Microphone permission denied for voice typing.");
-          setTimeout(() => setVoiceError(""), 4000);
+          setTimeout(() => setVoiceError(""), 5000);
         }
         setIsListening(false);
       };
@@ -287,8 +290,9 @@ function MessageArea() {
     try {
       setVoiceError("");
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setShowPermissionModal(true);
         setVoiceError("Voice recording is not supported on this browser.");
-        setTimeout(() => setVoiceError(""), 4000);
+        setTimeout(() => setVoiceError(""), 5000);
         return;
       }
 
@@ -339,9 +343,10 @@ function MessageArea() {
       }, 1000);
     } catch (err) {
       console.error("Microphone access error:", err);
-      setVoiceError("Microphone permission denied. Please allow microphone access in your browser.");
-      setTimeout(() => setVoiceError(""), 4000);
       setIsRecording(false);
+      setShowPermissionModal(true);
+      setVoiceError("Microphone permission denied. Please allow mic in browser address bar.");
+      setTimeout(() => setVoiceError(""), 5000);
     }
   };
 
@@ -735,10 +740,10 @@ function MessageArea() {
                   <button
                     type="button"
                     onClick={cancelRecording}
-                    className="p-2 text-gray-500 hover:text-red-600 cursor-pointer transition-all"
+                    className="p-2 text-gray-500 hover:text-red-600 cursor-pointer transition-all active:scale-95"
                     title="Cancel recording"
                   >
-                    <MdDeleteOutline className="w-6 h-6" />
+                    <FaTrash className="w-5 h-5" />
                   </button>
 
                   {/* Stop & Preview */}
@@ -784,7 +789,7 @@ function MessageArea() {
                     className="p-1.5 text-gray-500 hover:text-red-500 cursor-pointer transition-all"
                     title="Delete recording"
                   >
-                    <MdDeleteOutline className="w-5 h-5" />
+                    <FaTrash className="w-4 h-4" />
                   </button>
 
                   {/* Send Audio button */}
@@ -826,9 +831,9 @@ function MessageArea() {
                   <button
                     type="button"
                     onClick={toggleSpeechRecognition}
-                    className={`p-1 rounded-full cursor-pointer transition-all ${
+                    className={`p-1.5 rounded-full cursor-pointer transition-all ${
                       isListening
-                        ? "text-red-500 animate-pulse bg-red-100 scale-110"
+                        ? "text-red-500 animate-pulse bg-red-100 scale-110 shadow-sm"
                         : "text-gray-500 hover:text-[#1797c2]"
                     }`}
                     title={isListening ? "Stop voice typing" : `Voice Typing (${speechLanguage === "hi-IN" ? "Hindi" : speechLanguage})`}
@@ -879,11 +884,11 @@ function MessageArea() {
                   <FaImages className="w-5 h-5" />
                 </button>
 
-                {/* Mic (Record Voice Note) OR Send Message */}
+                {/* WhatsApp Style Mic (Record Voice Note) OR Send Message */}
                 {input.trim() || frontendImage ? (
                   <button 
                     type="submit" 
-                    className="w-9 h-9 rounded-full bg-[#1797c2] hover:bg-[#1280a5] text-white flex items-center justify-center shrink-0 shadow cursor-pointer transition-all active:scale-95"
+                    className="w-10 h-10 rounded-full bg-[#1797c2] hover:bg-[#1280a5] text-white flex items-center justify-center shrink-0 shadow-md cursor-pointer transition-all active:scale-95"
                     title="Send"
                   >
                     <RiSendPlane2Fill className="w-4 h-4 ml-0.5" />
@@ -892,10 +897,10 @@ function MessageArea() {
                   <button
                     type="button"
                     onClick={startRecording}
-                    className="w-9 h-9 rounded-full bg-slate-200 hover:bg-[#1797c2] text-gray-600 hover:text-white flex items-center justify-center shrink-0 shadow-xs cursor-pointer transition-all active:scale-95"
-                    title="Hold or click to record voice note"
+                    className="w-10 h-10 rounded-full bg-[#1797c2] hover:bg-[#1280a5] active:scale-95 text-white flex items-center justify-center shrink-0 shadow-md cursor-pointer transition-all"
+                    title="Record voice note"
                   >
-                    <MdMic className="w-5 h-5" />
+                    <FaMicrophone className="w-4 h-4" />
                   </button>
                 )}
               </form>
@@ -924,6 +929,16 @@ function MessageArea() {
           group={selectedGroup}
         />
       )}
+
+      {/* Mic Permission Guidance Modal */}
+      <MicPermissionModal
+        isOpen={showPermissionModal}
+        onClose={() => setShowPermissionModal(false)}
+        onTryAgain={() => {
+          setShowPermissionModal(false);
+          startRecording();
+        }}
+      />
     </div>
   );
 }

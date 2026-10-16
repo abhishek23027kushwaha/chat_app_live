@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { FaPlay, FaPause } from "react-icons/fa6";
-import { MdSpeed } from "react-icons/md";
+import { FaPlay, FaPause, FaMicrophone } from "react-icons/fa6";
 
 function AudioPlayer({ src, initialDuration = 0, isSender = false }) {
   const audioRef = useRef(null);
@@ -94,23 +93,24 @@ function AudioPlayer({ src, initialDuration = 0, isSender = false }) {
     >
       <audio ref={audioRef} src={src} preload="metadata" />
 
-      {/* Play/Pause Button */}
-      <button
-        type="button"
-        onClick={togglePlay}
-        className={`w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center shrink-0 shadow-md cursor-pointer transition-all active:scale-95 ${
-          isSender
-            ? "bg-white text-[#1797c2] hover:bg-slate-100"
-            : "bg-white text-[#1797c2] hover:bg-slate-100"
-        }`}
-        title={isPlaying ? "Pause" : "Play"}
-      >
-        {isPlaying ? (
-          <FaPause className="w-4 h-4 ml-0" />
-        ) : (
-          <FaPlay className="w-4 h-4 ml-0.5" />
-        )}
-      </button>
+      {/* Play/Pause Button with WhatsApp Mic badge */}
+      <div className="relative shrink-0">
+        <button
+          type="button"
+          onClick={togglePlay}
+          className="w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center shrink-0 shadow-md cursor-pointer transition-all active:scale-95 bg-white text-[#1797c2] hover:bg-slate-100"
+          title={isPlaying ? "Pause" : "Play"}
+        >
+          {isPlaying ? (
+            <FaPause className="w-4 h-4 ml-0" />
+          ) : (
+            <FaPlay className="w-4 h-4 ml-0.5" />
+          )}
+        </button>
+        <span className="w-4 h-4 bg-emerald-500 text-white rounded-full flex items-center justify-center absolute -bottom-1 -right-1 shadow-sm border border-white text-[9px]">
+          <FaMicrophone className="w-2.5 h-2.5" />
+        </span>
+      </div>
 
       {/* Progress & Waveform */}
       <div className="flex-1 flex flex-col justify-center min-w-0">
