@@ -18,6 +18,7 @@ function ReceiverMessage({
   onReact,
   onForward,
   onScrollToMessage,
+  onImageClick,
   currentUserId,
   isHighlighted = false,
 }) {
@@ -91,13 +92,24 @@ function ReceiverMessage({
           </div>
         )}
 
-        {/* Image Attachment */}
+        {/* Image Attachment (Click to open full-screen viewer) */}
         {image && !isDeleted && (
-          <img
-            src={image}
-            alt="msg"
-            className="w-[180px] sm:w-[220px] rounded-xl object-cover shadow-xs"
-          />
+          <div
+            onClick={() => onImageClick && onImageClick(image, messageObj)}
+            className="relative cursor-pointer group/img overflow-hidden rounded-xl border border-white/20 shadow-xs mb-1"
+            title="Click to view full image"
+          >
+            <img
+              src={image}
+              alt={message || "Photo"}
+              className="w-[200px] sm:w-[260px] max-h-[300px] object-cover transition-transform duration-300 group-hover/img:scale-105"
+            />
+            <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/20 transition-all flex items-center justify-center">
+              <span className="opacity-0 group-hover/img:opacity-100 bg-black/60 text-white text-[11px] font-bold px-2.5 py-1 rounded-full backdrop-blur-sm transition-opacity shadow-md">
+                🔍 Full View
+              </span>
+            </div>
+          </div>
         )}
 
         {/* Audio Attachment */}

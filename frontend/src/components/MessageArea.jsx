@@ -16,6 +16,8 @@ import EmojiPicker from "emoji-picker-react";
 import SenderMessage from "./SenderMessage";
 import ReceiverMessage from "./ReceiverMessage";
 import ForwardModal from "./ForwardModal";
+import ImagePreviewModal from "./ImagePreviewModal";
+import ImageViewerModal from "./ImageViewerModal";
 import { useDispatch, useSelector } from "react-redux";
 import { setMessages, setSelectedUser, setSelectedGroup } from "@/redux/userSlice";
 import axios from "axios";
@@ -34,13 +36,20 @@ function MessageArea() {
 
   const [showPicker, setShowPicker] = useState(false);
   const [input, setInput] = useState("");
-  const [frontendImage, setFrontendImage] = useState(null);
-  const [backendImage, setBackendImage] = useState(null);
   const [isTyping, setIsTyping] = useState(false);
   const [groupTypingUser, setGroupTypingUser] = useState(null);
   const [isGroupInfoOpen, setIsGroupInfoOpen] = useState(false);
   const [voiceError, setVoiceError] = useState("");
   const [showPermissionModal, setShowPermissionModal] = useState(false);
+
+  // 🔹 Image Sharing & Lightbox States
+  const [selectedImageFile, setSelectedImageFile] = useState(null);
+  const [selectedImagePreviewUrl, setSelectedImagePreviewUrl] = useState(null);
+  const [isImagePreviewOpen, setIsImagePreviewOpen] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+
+  const [viewerImageData, setViewerImageData] = useState(null);
+  const [isImageViewerOpen, setIsImageViewerOpen] = useState(false);
 
   // 🔹 Reply, Edit, Forward & Reaction States
   const [replyingTo, setReplyingTo] = useState(null);
@@ -312,19 +321,131 @@ function MessageArea() {
     setSearchQuery("");
     setSearchMatches([]);
     setHighlightedMessageId(null);
+    setIsImagePreviewOpen(false);
+    setIsImageViewerOpen(false);
+    setViewerImageData(null);
     return () => {
       if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
       if (recognitionRef.current) recognitionRef.current.stop();
       if (recordedAudioUrl) URL.revokeObjectURL(recordedAudioUrl);
+      if (selectedImagePreviewUrl) URL.revokeObjectURL(selectedImagePreviewUrl);
     };
   }, [selectedUser?._id, selectedGroup?._id]);
 
-  const handleImage = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setBackendImage(file);
-      setFrontendImage(URL.createObjectURL(file));
+  // 🔹 1. Image Selection (JPG, PNG, WebP) & Validation
+  const handleImageSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validTypes = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
+    if (!validTypes.includes(file.type)) {
+      setVoiceError("Please select a valid image (JPG, PNG, or WebP).");
+      setTimeout(() => setVoiceError(""), 4000);
+      e.target.value = null;
+      return;
     }
+
+    if (file.size > 15 * 1024 * 1024) {
+      setVoiceError("Image size must be less than 15MB.");
+      setTimeout(() => setVoiceError(""), 4000);
+      e.target.value = null;
+      return;
+    }
+
+    setSelectedImageFile(file);
+    const url = URL.createObjectURL(file);
+    setSelectedImagePreviewUrl(url);
+    setIsImagePreviewOpen(true);
+    e.target.value = null;
+  };
+
+  const handleCloseImagePreview = () => {
+    if (selectedImagePreviewUrl) {
+      URL.revokeObjectURL(selectedImagePreviewUrl);
+    }
+    setSelectedImageFile(null);
+    setSelectedImagePreviewUrl(null);
+    setIsImagePreviewOpen(false);
+    setIsUploadingImage(false);
+  };
+
+  // 🔹 2. Send Image with optional caption & replyTo
+  const handleSendImage = async (captionText = "") => {
+    if (!selectedImageFile) return;
+
+    try {
+      setIsUploadingImage(true);
+      setVoiceError("");
+
+      const formData = new FormData();
+      formData.append("image", selectedImageFile);
+      if (captionText) {
+        formData.append("message", captionText);
+      }
+      if (replyingTo) {
+        formData.append("replyTo", replyingTo._id);
+      }
+
+      let res;
+      if (isGroupChat) {
+        res = await axios.post(
+          `${server_url}/api/group/send/${selectedGroup._id}`,
+          formData,
+          {
+            withCredentials: true,
+            headers: { "Content-Type": "multipart/form-data" },
+          }
+        );
+      } else {
+        res = await axios.post(
+          `${server_url}/api/message/send/${selectedUser._id}`,
+          formData,
+          {
+            withCredentials: true,
+            headers: { "Content-Type": "multipart/form-data" },
+          }
+        );
+      }
+
+      const alreadyInList = messages.some((m) => String(m._id) === String(res.data._id));
+      if (!alreadyInList) {
+        dispatch(setMessages([...messages, res.data]));
+      }
+
+      setReplyingTo(null);
+      handleCloseImagePreview();
+    } catch (err) {
+      console.error("Image upload error:", err);
+      setVoiceError("Failed to upload image. Please try again.");
+      setTimeout(() => setVoiceError(""), 4000);
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
+  // 🔹 3. Full-Screen Image Lightbox
+  const handleOpenImageViewer = (imageUrl, messageObj) => {
+    if (!imageUrl) return;
+    const msgSenderId = messageObj?.sender?._id || messageObj?.sender;
+    const isMine = String(msgSenderId) === String(userData?._id);
+    const senderName = isGroupChat
+      ? (messageObj?.sender?.name || messageObj?.sender?.userName || "Member")
+      : isMine
+      ? "You"
+      : (selectedUser?.name || selectedUser?.userName || "User");
+
+    setViewerImageData({
+      url: imageUrl,
+      caption: messageObj?.message || "",
+      senderName,
+      createdAt: messageObj?.createdAt,
+    });
+    setIsImageViewerOpen(true);
+  };
+
+  const handleCloseImageViewer = () => {
+    setIsImageViewerOpen(false);
+    setViewerImageData(null);
   };
 
   // 🔹 Handle typing input change with auto-debounce
@@ -726,10 +847,10 @@ function MessageArea() {
     }
   };
 
-  // 🔹 SEND TEXT / IMAGE MESSAGE OR EDIT EXISTING
+  // 🔹 SEND TEXT MESSAGE OR EDIT EXISTING
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!input.trim() && !backendImage) return;
+    if (!input.trim()) return;
 
     // Clear typing indicator
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
@@ -767,9 +888,6 @@ function MessageArea() {
     try {
       const formData = new FormData();
       formData.append("message", input.trim());
-      if (backendImage) {
-        formData.append("image", backendImage);
-      }
       if (replyingTo) {
         formData.append("replyTo", replyingTo._id);
       }
@@ -800,8 +918,6 @@ function MessageArea() {
       }
 
       setInput("");
-      setFrontendImage(null);
-      setBackendImage(null);
       setReplyingTo(null);
     } catch (error) {
       console.log(error);
@@ -1020,6 +1136,7 @@ function MessageArea() {
                         onReact={handleReact}
                         onForward={handleForward}
                         onScrollToMessage={handleScrollToMessage}
+                        onImageClick={handleOpenImageViewer}
                         currentUserId={userData?._id}
                         isHighlighted={highlightedMessageId === mess._id}
                       />
@@ -1032,6 +1149,7 @@ function MessageArea() {
                         onReact={handleReact}
                         onForward={handleForward}
                         onScrollToMessage={handleScrollToMessage}
+                        onImageClick={handleOpenImageViewer}
                         currentUserId={userData?._id}
                         isHighlighted={highlightedMessageId === mess._id}
                       />
@@ -1113,26 +1231,6 @@ function MessageArea() {
               </div>
             )}
 
-            {/* Image Preview Thumbnail */}
-            {frontendImage && (
-              <div className="absolute bottom-[75px] left-4 bg-white p-1 rounded-xl shadow-xl border border-gray-200 animate-fadeIn z-20">
-                <img
-                  src={frontendImage}
-                  alt="preview"
-                  className="w-20 h-20 object-cover rounded-lg"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFrontendImage(null);
-                    setBackendImage(null);
-                  }}
-                  className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center shadow cursor-pointer font-bold"
-                >
-                  ✕
-                </button>
-              </div>
-            )}
 
             {/* Language Selector Dropdown (Speech-to-text) */}
             {showLangMenu && (
@@ -1299,8 +1397,8 @@ function MessageArea() {
                   type="file"
                   hidden
                   ref={imageRef}
-                  accept="image/*"
-                  onChange={handleImage}
+                  accept="image/jpeg, image/png, image/webp, image/jpg"
+                  onChange={handleImageSelect}
                 />
 
                 <input
@@ -1334,7 +1432,7 @@ function MessageArea() {
                 )}
 
                 {/* WhatsApp Style Mic (Record Voice Note) OR Send / Save Button */}
-                {input.trim() || frontendImage || editingMessage ? (
+                {input.trim() || editingMessage ? (
                   <button 
                     type="submit" 
                     className={`w-10 h-10 rounded-full text-white flex items-center justify-center shrink-0 shadow-md cursor-pointer transition-all active:scale-95 ${
@@ -1400,6 +1498,23 @@ function MessageArea() {
           setShowPermissionModal(false);
           startRecording();
         }}
+      />
+
+      {/* 🖼️ Image Preview Before Sending Modal */}
+      <ImagePreviewModal
+        isOpen={isImagePreviewOpen}
+        onClose={handleCloseImagePreview}
+        imageFile={selectedImageFile}
+        previewUrl={selectedImagePreviewUrl}
+        onSend={handleSendImage}
+        isUploading={isUploadingImage}
+      />
+
+      {/* 🔍 Full-Screen Image Lightbox Viewer Modal */}
+      <ImageViewerModal
+        isOpen={isImageViewerOpen}
+        onClose={handleCloseImageViewer}
+        imageData={viewerImageData}
       />
     </div>
   );
